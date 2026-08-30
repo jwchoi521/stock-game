@@ -83,7 +83,12 @@
   .dhint { font-size:12px; color:var(--dim); line-height:1.5; margin:0 0 18px; }
   /* 만들어진 결과 카드 미리보기. 공유가 막힌 환경에선 여기서 직접 저장한다 */
   #shareImg { display:none; width:min(340px,90vw); border:1px solid var(--line);
-              border-radius:12px; margin-top:10px; }
+              border-radius:12px; }
+  /* 미리보기 이미지와 안내 문구는 버튼 줄과 달리 세로로 쌓는다 */
+  .shareOut { display:flex; flex-direction:column; align-items:center; margin-top:22px; }
+  #shareHint { display:none; width:min(340px,90vw); margin-top:8px; font-size:13px;
+               color:var(--dim); line-height:1.6; text-align:center; }
+  #shareHint b { color:var(--txt); }
   .slist { display:grid; gap:12px; }
   .scard { text-align:left; background:var(--card); border:1px solid var(--line); border-radius:14px;
            padding:16px; cursor:pointer; display:flex; flex-direction:column; gap:6px;
@@ -212,8 +217,9 @@
     <button id="btnRetry">같은 스테이지 다시</button>
     <button id="btnOther">다른 스테이지</button>
   </div>
-  <div class="actions">
+  <div class="shareOut">
     <img id="shareImg" alt="결과 카드 이미지">
+    <p id="shareHint"></p>
   </div>
 </section>
 
@@ -501,6 +507,7 @@ async function end() {
   $("finalStage").textContent = `${stage.title} · ${DIFFS[diff].label}`;
   $("finalWindow").textContent = `${ymd(stage.window.start)} → ${ymd(stage.window.end)}`;
   $("shareImg").style.display = "none";
+  $("shareHint").style.display = "none";
   $("btnShare").textContent = "이미지로 공유";
   if (state.streak > Number(store.get(bestKey(stage.id, diff)) || 0))
     store.set(bestKey(stage.id, diff), String(state.streak));
@@ -590,7 +597,6 @@ $("btnDown").onclick = () => answer(false);
    공유 시트(파일 첨부) → 클립보드 → 화면에 이미지 펼치기 순으로 물러난다. */
 const SHARE_W = 1080, SHARE_PAD = 80;
 const SHARE_FONT = 'system-ui,-apple-system,"Malgun Gothic",sans-serif';
-let shareUrl = null;
 
 function shareText() {
   const last = state.history.slice(-2);
@@ -706,31 +712,42 @@ function drawShareCard() {
 }
 
 // 상태: "공유함" | "이미지 복사됨" | "펼침" | "실패" | null(사용자가 공유 시트를 닫음)
+// toBlob은 비동기라 기다리는 사이 사용자 제스처가 소진된다. iOS 사파리와 인앱
+// 브라우저는 제스처가 살아 있을 때만 공유·클립보드를 허용하므로, 동기 API인
+// toDataURL로 만들어 첫 await 전에 Blob을 손에 쥔다.
+function pngFrom(cv) {
+  const url = cv.toDataURL("image/png");
+  const bin = atob(url.split(",")[1]);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  // 미리보기는 blob:이 아니라 data:로 건다. 안드로이드 WebView의 "이미지 저장"은
+  // 다운로드 매니저를 거치는데 blob: 주소를 해석하지 못해 저장이 실패한다.
+  return { blob: new Blob([buf], { type: "image/png" }), url };
+}
+
 async function shareImage() {
-  const png = new Promise(r => drawShareCard().toBlob(r, "image/png"));
+  const { blob, url } = pngFrom(drawShareCard());   // 여기까지 전부 동기 — 제스처가 살아 있다
+  if (!blob.size) return { status: "실패" };
 
   // 모바일은 공유 시트가 자연스럽다(목록에 카톡이 뜬다). 데스크톱 공유 시트에는
   // 카톡이 없어서 붙여넣기가 목적이 되므로, 클립보드를 먼저 시도한다.
   const mobile = matchMedia("(pointer: coarse)").matches;
   if (mobile) {
-    const r = await shareSheet(await png);
+    const r = await shareSheet(blob);
     if (r) return r;
   }
 
-  // ClipboardItem에는 Blob 대신 약속을 그대로 넘긴다. await로 사용자 제스처가
-  // 끊긴 뒤에 쓰면 사파리가 거부한다. 클립보드 자체가 보안 컨텍스트 전용이라
-  // file://로 열면 여기서 실패한다 — http://localhost나 https로 열어야 한다.
+  // 클립보드는 보안 컨텍스트 전용이고, 인앱 브라우저에서는 권한이 없는 경우가 많다
   try {
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
-    return { status: "이미지 복사됨", blob: await png };
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return { status: "이미지 복사됨", url };
   } catch {}
 
   if (!mobile) {
-    const r = await shareSheet(await png);
+    const r = await shareSheet(blob);
     if (r) return r;
   }
-  const blob = await png;
-  return blob ? { status: "펼침", blob } : { status: "실패" };
+  return { status: "펼침", url };
 }
 
 // 공유 시트를 쓸 수 없으면 null을 돌려 다음 수단으로 넘긴다
@@ -742,12 +759,21 @@ async function shareSheet(blob) {
   catch (e) { return e && e.name === "AbortError" ? { status: null } : null; }
 }
 
-function showShareImage(blob) {
-  const img = $("shareImg");
-  if (shareUrl) URL.revokeObjectURL(shareUrl);
-  shareUrl = URL.createObjectURL(blob);
-  img.src = shareUrl;
+function showShareImage(url, blocked) {
+  const img = $("shareImg"), hint = $("shareHint");
+  img.src = url;
   img.style.display = "block";
+  // 공유·복사가 모두 막힌 환경(카톡 인앱 브라우저 등)에서는 손으로 가져가는 법을 알려준다
+  if (blocked) {
+    hint.innerHTML = matchMedia("(pointer: coarse)").matches
+      ? "위 이미지를 <b>길게 눌러</b> 저장한 뒤 카톡에서 사진으로 첨부하세요."
+      : "위 이미지를 <b>우클릭 → 이미지 복사</b>한 뒤 붙여넣으세요.";
+    if (/KAKAOTALK/i.test(navigator.userAgent))
+      hint.innerHTML += "<br>카톡 브라우저는 공유 기능이 막혀 있습니다. 우측 하단 메뉴의 "
+        + "<b>다른 브라우저로 열기</b>로 열면 바로 공유됩니다.";
+  }
+  hint.style.display = blocked ? "block" : "none";
+  img.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 $("btnShare").onclick = async () => {
@@ -758,7 +784,7 @@ $("btnShare").onclick = async () => {
   try { r = await shareImage(); } catch { r = { status: "실패" }; }
   btn.disabled = false;
   if (r.status === null) { btn.textContent = "이미지로 공유"; return; }
-  if (r.blob) showShareImage(r.blob);   // 저장하거나 붙여넣기 전에 눈으로 확인하게 한다
+  if (r.url) showShareImage(r.url, r.status === "펼침");   // 저장·붙여넣기 전에 눈으로 확인하게 한다
   // 어느 공유 경로도 막힌 환경. 이미지를 펼쳐 직접 가져가게 한다
   btn.textContent = r.status !== "펼침" ? r.status
     : matchMedia("(pointer: coarse)").matches ? "길게 눌러 저장하세요" : "우클릭 → 이미지 복사";
