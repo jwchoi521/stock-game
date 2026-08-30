@@ -229,12 +229,13 @@ const DATA = {"version":2,"stages":[{"id":"dotcom-bubble","title":"닷컴 버블
 
 <script>
 /* ── 순위표 백엔드 ───────────────────────────────────────────────
-   지금은 브라우저 localStorage에 저장한다(그 PC 안에서만 공유).
-   웹에 올린 뒤 API_BASE에 엔드포인트 주소를 넣으면 서버 순위표로 바뀐다.
-     GET  {API_BASE}?stage=<stageId>&diff=<easy|normal|hard>  → [{ nick, streak, at }, ...]
-     POST {API_BASE}  body: { stage, diff, nick, streak, at }
+   두 값을 채우면 Supabase 공용 순위표로, 비워두면 localStorage(기기 안에서만
+   공유)로 동작한다. anon 키는 공개용이라 클라이언트에 박아도 되지만, 조작을
+   막는 건 테이블의 RLS 정책이다. service_role 키는 절대 여기에 넣지 않는다.
+   테이블 생성 SQL은 supabase.sql 참고.
    ──────────────────────────────────────────────────────────── */
-const API_BASE = null;
+const SUPABASE_URL = "https://tdineueewartulwrrgbt.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkaW5ldWVld2FydHVsd3JyZ2J0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwOTIzMDksImV4cCI6MjEwMzY2ODMwOX0._BdUTD1ZmlO1tTYX-SZkUjflX56-2jah8Jo3owg7SEo";
 
 const LS_NICK = "hl.nick";
 const LS_DIFF = "hl.diff";
@@ -247,22 +248,35 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} }
 };
 
+const online = () => Boolean(SUPABASE_URL && SUPABASE_KEY);
+// 레거시 anon 키는 JWT("ey...")라 Authorization까지 보내야 하고,
+// 새 publishable 키(sb_publishable_...)는 apikey 헤더만 쓴다
+const sbHeaders = () => {
+  const h = { apikey: SUPABASE_KEY };
+  if (SUPABASE_KEY.startsWith("ey")) h.Authorization = `Bearer ${SUPABASE_KEY}`;
+  return h;
+};
+
 const board = {
   async load(stageId, diffId) {
-    if (API_BASE) {
+    if (online()) {
+      const q = `stage=eq.${encodeURIComponent(stageId)}&diff=eq.${encodeURIComponent(diffId)}`;
       const res = await fetch(
-        `${API_BASE}?stage=${encodeURIComponent(stageId)}&diff=${encodeURIComponent(diffId)}`);
+        `${SUPABASE_URL}/rest/v1/scores?${q}&select=nick,streak,at&order=streak.desc,at.asc&limit=200`,
+        { headers: sbHeaders() });
+      if (!res.ok) throw new Error(res.status);
       return res.json();
     }
     try { return JSON.parse(store.get(boardKey(stageId, diffId))) || []; } catch { return []; }
   },
   async submit(stageId, diffId, entry) {
-    if (API_BASE) {
-      await fetch(API_BASE, {
+    if (online()) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...sbHeaders(), "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({ stage: stageId, diff: diffId, ...entry })
       });
+      if (!res.ok) throw new Error(res.status);
       return this.load(stageId, diffId);
     }
     const all = [...(await this.load(stageId, diffId)), entry];
@@ -464,6 +478,20 @@ async function end() {
   try { all = await board.submit(stage.id, diff, entry); }
   catch { $("board").innerHTML = `<div class="brow"><span class="who">순위표를 불러오지 못했습니다</span></div>`; return; }
   renderBoard(all, entry);
+  watchBoard(entry);
+}
+
+/* 결과 화면을 보고 있는 동안 남이 올린 기록을 주기적으로 받아온다.
+   순위표는 결과 화면에서만 보이므로 웹소켓 없이 10초 폴링이면 충분하다.
+   로컬 모드에서는 남이 올릴 일이 없으니 돌리지 않는다. */
+let boardTimer = null;
+function watchBoard(mine) {
+  clearInterval(boardTimer);
+  if (!online()) return;
+  boardTimer = setInterval(async () => {
+    if ($("result").style.display === "none") return clearInterval(boardTimer);
+    try { renderBoard(await board.load(stage.id, diff), mine); } catch {}
+  }, 10000);
 }
 
 function renderBoard(all, mine) {
