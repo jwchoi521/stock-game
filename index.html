@@ -735,18 +735,20 @@ async function shareImage() {
   if (mobile) {
     const r = await shareSheet(blob);
     if (r) return r;
+    // 여기까지 왔으면 인앱 브라우저다. 그 클립보드는 성공을 반환하고도 실제로는
+    // 아무것도 담기지 않고, 모바일 키보드는 이미지 붙여넣기를 대개 지원하지 않는다.
+    // 거짓 성공을 알리는 대신 확실히 되는 저장 경로를 안내한다.
+    return { status: "펼침", url };
   }
 
-  // 클립보드는 보안 컨텍스트 전용이고, 인앱 브라우저에서는 권한이 없는 경우가 많다
+  // 클립보드는 보안 컨텍스트 전용이다(file://에서는 실패)
   try {
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     return { status: "이미지 복사됨", url };
   } catch {}
 
-  if (!mobile) {
-    const r = await shareSheet(blob);
-    if (r) return r;
-  }
+  const r = await shareSheet(blob);
+  if (r) return r;
   return { status: "펼침", url };
 }
 
@@ -785,9 +787,14 @@ $("btnShare").onclick = async () => {
   btn.disabled = false;
   if (r.status === null) { btn.textContent = "이미지로 공유"; return; }
   if (r.url) showShareImage(r.url, r.status === "펼침");   // 저장·붙여넣기 전에 눈으로 확인하게 한다
-  // 어느 공유 경로도 막힌 환경. 이미지를 펼쳐 직접 가져가게 한다
-  btn.textContent = r.status !== "펼침" ? r.status
-    : matchMedia("(pointer: coarse)").matches ? "길게 눌러 저장하세요" : "우클릭 → 이미지 복사";
+  // 어느 공유 경로도 막힌 환경. 이미지를 펼쳐 직접 가져가게 한다.
+  // 이때의 문구는 결과 알림이 아니라 지금 해야 할 일이라, 원래대로 되돌리지 않는다.
+  if (r.status === "펼침") {
+    btn.textContent = matchMedia("(pointer: coarse)").matches
+      ? "길게 눌러 저장하세요" : "우클릭 → 이미지 복사";
+    return;
+  }
+  btn.textContent = r.status;
   setTimeout(() => { btn.textContent = "이미지로 공유"; }, 2500);
 };
 
