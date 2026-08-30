@@ -495,15 +495,22 @@ function watchBoard(mine) {
 }
 
 function renderBoard(all, mine) {
-  const sorted = [...all].sort((a, b) => b.streak - a.streak || a.at - b.at);
-  const myRank = sorted.findIndex(e => e.at === mine.at && e.nick === mine.nick) + 1;
+  // 한 사람이 여러 판 하면 상위권이 같은 닉으로 도배되므로 닉네임당 최고 기록만 남긴다.
+  // 연승이 같으면 먼저 세운 쪽을 남긴다(정렬 규칙과 동일).
+  const best = new Map();
+  for (const e of all) {
+    const cur = best.get(e.nick);
+    if (!cur || e.streak > cur.streak || (e.streak === cur.streak && e.at < cur.at)) best.set(e.nick, e);
+  }
+  const sorted = [...best.values()].sort((a, b) => b.streak - a.streak || a.at - b.at);
+  const myRank = sorted.findIndex(e => e.nick === mine.nick) + 1;
   $("boardTitle").textContent =
-    `${stage.title} · ${DIFFS[diff].label} 순위표 · 총 ${sorted.length}판 중 ${myRank}위`;
+    `${stage.title} · ${DIFFS[diff].label} 순위표 · 총 ${sorted.length}명 중 ${myRank}위`;
   const top = sorted.slice(0, 10);
   if (myRank > 10) top.push(sorted[myRank - 1]);
   $("board").innerHTML = top.map(e => {
     const rank = sorted.indexOf(e) + 1;
-    const me = e.at === mine.at && e.nick === mine.nick;
+    const me = e.nick === mine.nick;
     const d = new Date(e.at);
     const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     return `<div class="brow ${me ? "me" : ""}">
