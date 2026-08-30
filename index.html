@@ -115,7 +115,9 @@
   .brow .when { font-size:12px; color:var(--dim); }
   .brow .sc { font-variant-numeric:tabular-nums; font-weight:700; }
   .actions { display:flex; gap:10px; margin-top:22px; }
-  .actions button { flex:1; }
+  /* 좁은 폰에서 버튼 글자가 '같은 스/테이지/다시'처럼 어절 중간에서 끊기던 걸 막는다.
+     keep-all은 한글을 어절 단위로만 줄바꿈하고, 그만큼 폭이 필요해 좌우 여백을 줄였다 */
+  .actions button { flex:1; padding:14px 10px; word-break:keep-all; }
   .foot { padding:10px 16px; font-size:11px; color:var(--dim); text-align:center;
           border-top:1px solid var(--line); line-height:1.6; }
   /* 세로가 짧은 폰(아이폰 SE 375x667, 보급형 안드로이드 360x640)에서 답변 버튼이
