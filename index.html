@@ -94,6 +94,7 @@
   .scard .sc { font-size:13px; color:#c3cad4; line-height:1.5; }
   .scard .sm { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
   .scard .best { color:var(--gold); font-weight:700; }
+  .scard .top { color:#93b4ff; font-weight:700; }
   /* 결과 화면 */
   #result { display:none; padding:24px 16px 40px; overflow-y:auto; }
   #result h1 { font-size:24px; margin-bottom:4px; }
@@ -391,12 +392,54 @@ function renderSelect() {
       <span class="sm">
         <span class="stat"><span class="k">종목</span><b>${s.cards.length}</b></span>
         <span class="stat"><span class="k">🇰🇷 / 🇺🇸</span><b>${kr} / ${s.cards.length - kr}</b></span>
-        ${best ? `<span class="stat best">🔥 최고 ${best}연승</span>` : ""}
+        ${best ? `<span class="stat best">🔥 내 최고 ${best}연승</span>` : ""}
+        ${online() ? `<span class="stat top" id="top-${s.id}"><span class="k">전체 1위</span>…</span>` : ""}
       </span>
     </div>`;
   }).join("");
   for (const el of document.querySelectorAll(".scard"))
     el.onclick = () => startStage(el.dataset.id);
+  watchTops();
+}
+
+/* ── 스테이지별 전체 1위 ──
+   PostgREST에 group by가 없어 스테이지마다 상위 1건씩 따로 받는다. 다섯 번이지만
+   각각 limit=1이라 가볍고, 표가 아무리 커져도 값이 정확하다.
+   선택 화면을 보고 있는 동안 15초마다 갱신한다. */
+let selectTimer = null;
+async function topOf(stageId, diffId) {
+  const q = `stage=eq.${encodeURIComponent(stageId)}&diff=eq.${encodeURIComponent(diffId)}`;
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/scores?${q}&select=nick,streak&order=streak.desc,at.asc&limit=1`,
+    { headers: sbHeaders() });
+  if (!res.ok) throw new Error(res.status);
+  const [top] = await res.json();
+  return top || null;
+}
+
+async function paintTops() {
+  const d = diff;   // 그리는 도중 난이도가 바뀌면 결과를 버린다
+  const tops = await Promise.all(DATA.stages.map(s => topOf(s.id, d).catch(() => undefined)));
+  if (d !== diff) return;
+  DATA.stages.forEach((s, i) => {
+    const el = $("top-" + s.id);
+    if (!el) return;
+    const t = tops[i];
+    if (t === undefined) return;                       // 조회 실패 — 직전 값을 유지한다
+    el.innerHTML = t
+      ? `<span class="k">전체 1위</span>${esc(t.nick)} ${t.streak}연승`
+      : `<span class="k">전체 1위</span>아직 없음`;
+  });
+}
+
+function watchTops() {
+  clearInterval(selectTimer);
+  if (!online()) return;
+  paintTops();
+  selectTimer = setInterval(() => {
+    if ($("select").style.display === "none") return clearInterval(selectTimer);
+    paintTops();
+  }, 15000);
 }
 
 function startStage(id) {
