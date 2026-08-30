@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>그때 샀더라면</title>
+<!-- 카톡·슬랙 등에 링크를 붙였을 때 뜨는 미리보기.
+     og:image는 반드시 절대 URL이어야 한다 — 카카오 스크래퍼가 상대 경로를 못 읽는다. -->
+<meta name="description" content="같은 기간, 두 종목 중 어느 쪽이 더 올랐을까요? 다섯 개 시장 국면의 실제 수익률로 겨루는 게임">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="그때 샀더라면">
+<meta property="og:title" content="그때 샀더라면">
+<meta property="og:description" content="같은 기간, 두 종목 중 어느 쪽이 더 올랐을까요? 다섯 개 시장 국면의 실제 수익률로 겨루는 게임">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:url" content="https://jwchoi521.github.io/stock-game/">
+<meta property="og:image" content="https://jwchoi521.github.io/stock-game/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root { --bg:#0e1116; --card:#171b22; --line:#262c36; --txt:#e8ecf1; --dim:#8b95a3;
+          --up:#ff4d5e; --down:#3b82f6; --gold:#f5c451; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--txt); font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;
+         min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex;
+           justify-content:space-between; align-items:center; gap:12px; }
+  .stage { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .stage .title { font-size:13px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .period { font-size:19px; font-weight:800; letter-spacing:-.3px; font-variant-numeric:tabular-nums; }
+  .hud { text-align:right; white-space:nowrap; }
+  .hud .nick { display:block; font-size:12px; color:var(--dim); }
+  .streak { font-weight:700; font-size:15px; }
+  main { flex:1; display:flex; flex-direction:column; }
+  .card { position:relative; overflow:hidden; flex:1; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; gap:10px; padding:24px 16px; text-align:center;
+          transition:background .35s; }
+  .card + .card { border-top:1px solid var(--line); }
+  .wm { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+        font-size:min(46vw,240px); line-height:1; opacity:.13; filter:grayscale(.2);
+        pointer-events:none; user-select:none; }
+  .card > *:not(.wm) { position:relative; z-index:1; }
+  .name { font-size:28px; font-weight:700; text-shadow:0 2px 12px rgba(0,0,0,.6); }
+  .name .tk { font-size:16px; font-weight:400; color:var(--dim); margin-left:6px; }
+  .row .tk { color:var(--dim); }
+  .flag { font-size:16px; margin-right:6px; }
+  .label { font-size:13px; color:var(--dim); }
+  .desc { font-size:13px; color:var(--dim); max-width:320px; line-height:1.5; margin-top:-4px; }
+  .stats { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .stat { font-size:12px; color:#c3cad4; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.07);
+          border-radius:999px; padding:5px 11px; white-space:nowrap; }
+  .stat b { font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .k { color:var(--dim); font-weight:400; margin-right:4px; }
+  .headline { font-size:14px; color:#c3cad4; max-width:340px; line-height:1.5;
+              background:rgba(0,0,0,.35); padding:8px 12px; border-radius:10px;
+              border:1px solid rgba(255,255,255,.07); }
+  .headline::before { content:"📰 "; }
+  .value { font-size:44px; font-weight:800; font-variant-numeric:tabular-nums;
+           text-shadow:0 2px 12px rgba(0,0,0,.6); }
+  .value.up { color:var(--up); } .value.down { color:var(--down); }
+  .buttons { display:flex; gap:10px; margin-top:6px; }
+  button { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:12px;
+           padding:14px 26px; font-size:16px; font-weight:700; cursor:pointer; font-family:inherit; }
+  button:hover:not(:disabled) { border-color:#4b5563; }
+  button:disabled { opacity:.4; cursor:default; }
+  .mark { font-size:40px; height:44px; }
+  /* 닉네임 화면 */
+  #intro { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+           gap:14px; padding:32px 16px; text-align:center; }
+  #intro h1 { font-size:26px; }
+  #intro p { font-size:14px; color:var(--dim); line-height:1.6; max-width:420px; }
+  #nickInput { background:var(--card); border:1px solid var(--line); border-radius:12px; color:var(--txt);
+               padding:14px 16px; font-size:17px; width:min(320px,90vw); text-align:center;
+               font-family:inherit; }
+  #nickInput:focus { outline:none; border-color:#4b5563; }
+  /* 스테이지 선택 화면 */
+  #select { display:none; padding:24px 16px 40px; }
+  #select h2.head { font-size:20px; color:var(--txt); margin:0 0 4px; }
+  #select p.sub { font-size:13px; color:var(--dim); margin-bottom:18px; }
+  .dlist { display:flex; gap:8px; margin-bottom:8px; }
+  .dbtn { flex:1; padding:10px 8px; font-size:14px; font-weight:700; border-radius:12px; }
+  .dbtn.on { border-color:var(--gold); color:var(--gold); }
+  .dhint { font-size:12px; color:var(--dim); line-height:1.5; margin:0 0 18px; }
+  /* 만들어진 결과 카드 미리보기. 공유가 막힌 환경에선 여기서 직접 저장한다 */
+  #shareImg { display:none; width:min(340px,90vw); border:1px solid var(--line);
+              border-radius:12px; margin-top:10px; }
+  .slist { display:grid; gap:12px; }
+  .scard { text-align:left; background:var(--card); border:1px solid var(--line); border-radius:14px;
+           padding:16px; cursor:pointer; display:flex; flex-direction:column; gap:6px;
+           transition:border-color .15s, transform .15s; }
+  .scard:hover { border-color:#4b5563; transform:translateY(-1px); }
+  .scard .st { font-size:18px; font-weight:800; }
+  .scard .sw { font-size:13px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .scard .sc { font-size:13px; color:#c3cad4; line-height:1.5; }
+  .scard .sm { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  .scard .best { color:var(--gold); font-weight:700; }
+  /* 결과 화면 */
+  #result { display:none; padding:24px 16px 40px; overflow-y:auto; }
+  #result h1 { font-size:24px; margin-bottom:4px; }
+  #result .sub { font-size:14px; color:var(--dim); margin-bottom:18px; font-weight:700; }
+  h2 { font-size:15px; color:var(--dim); margin:26px 0 8px; }
+  .row { display:flex; align-items:baseline; gap:10px; padding:11px 0;
+         border-bottom:1px solid var(--line); font-size:16px; }
+  .row .n { color:var(--dim); width:22px; flex:none; font-variant-numeric:tabular-nums; }
+  .row .sym { flex:none; font-size:18px; }
+  .row .r { font-variant-numeric:tabular-nums; font-weight:700; }
+  .row .note { display:block; font-size:13px; color:var(--dim); margin-top:3px; line-height:1.45; }
+  .ok { color:#22c55e; } .no { color:#ef4444; }
+  .brow { display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid var(--line);
+          font-size:15px; border-radius:8px; }
+  .brow.me { background:rgba(245,196,81,.12); color:var(--gold); font-weight:700; }
+  .brow .rank { width:28px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .brow.me .rank { color:var(--gold); }
+  .brow .who { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .brow .when { font-size:12px; color:var(--dim); }
+  .brow .sc { font-variant-numeric:tabular-nums; font-weight:700; }
+  .actions { display:flex; gap:10px; margin-top:22px; }
+  .actions button { flex:1; }
+  .foot { padding:10px 16px; font-size:11px; color:var(--dim); text-align:center;
+          border-top:1px solid var(--line); line-height:1.6; }
+  /* 세로가 짧은 폰(아이폰 SE 375x667, 보급형 안드로이드 360x640)에서 답변 버튼이
+     화면 밖으로 밀리지 않도록 게임 화면 요소를 압축한다. 데스크톱에는 영향 없음 */
+  @media (max-height:720px) {
+    header { padding:8px 16px; }
+    .card { gap:6px; padding:12px 14px; }
+    .wm { font-size:min(38vw,180px); }
+    .name { font-size:22px; }
+    .name .tk { font-size:13px; }
+    .value { font-size:32px; }
+    .desc { font-size:12px; }
+    .headline { font-size:13px; padding:6px 10px; }
+    .buttons { margin-top:2px; }
+    .foot { font-size:10px; padding:8px 16px; line-height:1.5; }
+  }
+  @media (min-width:760px) {
+    main { flex-direction:row; }
+    .card + .card { border-top:none; border-left:1px solid var(--line); }
+    .wm { font-size:min(22vw,260px); }
+    .period { font-size:24px; }
+    #result, #select { max-width:620px; margin:0 auto; width:100%; }
+    .slist { grid-template-columns:1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="stage">
+    <span class="title" id="hdTitle">그때 샀더라면</span>
+    <span class="period" id="hdPeriod">두 종목 중 더 오른 쪽 고르기</span>
+  </span>
+  <span class="hud">
+    <span class="nick" id="hudNick"></span>
+    <span class="streak">🔥 <span id="streak">0</span>연승</span>
+  </span>
+</header>
+
+<section id="intro">
+  <h1>그때 샀더라면</h1>
+  <p>같은 기간, 두 종목 중 어느 쪽이 더 올랐을까요?<br>
+     다섯 개 시장 국면, <span id="introTotal">—</span>개 종목의 실제 수익률로 겨룹니다.</p>
+  <input id="nickInput" maxlength="12" placeholder="닉네임 (최대 12자)" autocomplete="off">
+  <button id="btnStart">시작하기</button>
+</section>
+
+<section id="select">
+  <h2 class="head">스테이지 선택</h2>
+  <p class="sub">각 스테이지는 같은 기간을 공유합니다. 기간이 다르면 비교가 불공정해지니까요.</p>
+  <div class="dlist" id="dlist"></div>
+  <p class="dhint">난이도를 올릴수록 두 종목의 수익률 격차가 좁아집니다. 기록은 난이도별로 따로 남습니다.</p>
+  <div class="slist" id="slist"></div>
+</section>
+
+<main id="game" style="display:none">
+  <div class="card" id="curCard">
+    <div class="wm" id="curWm"></div>
+    <div class="label">기준</div>
+    <div class="name" id="curName">—</div>
+    <div class="desc" id="curDesc"></div>
+    <div class="stats" id="curStats"></div>
+    <div class="value" id="curValue">—</div>
+    <div class="headline" id="curHeadline"></div>
+  </div>
+  <div class="card" id="nextCard">
+    <div class="wm" id="nextWm"></div>
+    <div class="label" id="nextLabel">이 종목의 수익률은?</div>
+    <div class="name" id="nextName">—</div>
+    <div class="desc" id="nextDesc"></div>
+    <div class="stats" id="nextStats"></div>
+    <div class="headline" id="nextHeadline"></div>
+    <div class="value" id="nextValue">?</div>
+    <div class="buttons">
+      <button id="btnUp">더 높다</button>
+      <button id="btnDown">더 낮다</button>
+    </div>
+    <div class="mark" id="mark"></div>
+  </div>
+</main>
+
+<section id="result">
+  <h1><span id="finalStreak">0</span>연승 · <span id="finalStage">—</span></h1>
+  <div class="sub" id="finalWindow">—</div>
+  <h2 id="boardTitle">순위표</h2>
+  <div id="board"></div>
+  <h2>지나온 카드</h2>
+  <div id="rows"></div>
+  <div class="actions">
+    <button id="btnShare">이미지로 공유</button>
+    <button id="btnRetry">같은 스테이지 다시</button>
+    <button id="btnOther">다른 스테이지</button>
+  </div>
+  <div class="actions">
+    <img id="shareImg" alt="결과 카드 이미지">
+  </div>
+</section>
+
+<div class="foot">
+  실제 수익률 (국내: KRX·yfinance · 미국: yfinance) · <b>배당을 재투자했다고 보는 총수익률이라 주가 차트보다 높습니다</b> · 현지 통화 기준이며 환율은 반영하지 않았습니다<br>
+  시총은 시작일 주가 × 당시 상장주식수(미국은 원화 환산) · 낙폭은 시작일 직전 1년 고점 대비 · 투자 권유가 아닙니다
+</div>
+
+<script>
+/*DATA_START*/
+const DATA = {"version":2,"stages":[{"id":"dotcom-bubble","title":"닷컴 버블","window":{"start":"1999-01-04","end":"2000-03-10"},"context":"나스닥이 2,000선에서 5,048까지 치솟던 14개월. 국내 데이터가 남아 있지 않아 미국 종목만","cards":[{"id":"AAPL","name":"애플","mkt":"US","return":196.4,"cap":null,"dd":-4.1,"desc":"매킨토시를 만드는 PC 회사. 1997년 복귀한 잡스가 제품군을 정리하는 중","headline":"아이맥 흥행으로 흑자 전환, 아이북과 G4로 라인업을 다시 짰다","sym":"🍎","color":"#6e6e73"},{"id":"MSFT","name":"마이크로소프트","mkt":"US","return":41.8,"cap":null,"dd":-1.8,"desc":"윈도우와 오피스로 PC 소프트웨어를 사실상 독점한 회사","headline":"반독점 소송에서 독점 사실이 인정돼 회사 분할론까지 나왔다","sym":"🪟","color":"#0078d4"},{"id":"INTC","name":"인텔","mkt":"US","return":96.4,"cap":null,"dd":-3.3,"desc":"PC용 CPU 시장을 지배하는 종합 반도체 기업","headline":"펜티엄III 출시와 PC·서버 수요 호조로 사상 최대 실적","sym":"💻","color":"#0068b5"},{"id":"CSCO","name":"시스코","mkt":"US","return":192.3,"cap":null,"dd":-1.2,"desc":"인터넷 라우터·스위치를 파는 네트워크 장비 1위 회사","headline":"인터넷 인프라 투자 붐으로 시가총액 세계 1위를 눈앞에 뒀다","sym":"🌐","color":"#1ba0d7"},{"id":"ORCL","name":"오라클","mkt":"US","return":486.0,"cap":null,"dd":-3.4,"desc":"기업용 데이터베이스 1위 소프트웨어 회사","headline":"기업들이 웹으로 옮겨가며 자신을 '인터넷 회사'로 다시 포장했다","sym":"🗃️","color":"#c74634"},{"id":"QCOM","name":"퀄컴","mkt":"US","return":1732.7,"cap":null,"dd":-15.6,"desc":"CDMA 이동통신 기술 특허와 통신칩을 파는 회사","headline":"CDMA 로열티 기대가 부풀며 목표주가 1,000달러 리포트까지 나왔다","sym":"📶","color":"#3253dc"},{"id":"TXN","name":"텍사스인스트루먼트","mkt":"US","return":314.5,"cap":null,"dd":-2.2,"desc":"휴대폰용 DSP가 주력인 아날로그·디지털 반도체 회사","headline":"휴대폰 보급이 폭발하며 DSP 수요가 함께 뛰었다","sym":"🧮","color":"#cc0000"},{"id":"AMZN","name":"아마존","mkt":"US","return":16.3,"cap":null,"dd":0.0,"desc":"책에서 시작해 취급 품목을 넓혀가는 온라인 소매업체","headline":"매출과 함께 적자도 커졌다, 물류센터 확장에 현금을 쏟아부었다","sym":"📦","color":"#ff9900"},{"id":"IBM","name":"IBM","mkt":"US","return":18.7,"cap":null,"dd":-3.3,"desc":"메인프레임부터 컨설팅까지 하는 종합 IT 기업","headline":"Y2K 특수가 끝나가며 하드웨어 매출 경고를 냈다","sym":"💼","color":"#0f62fe"},{"id":"HPQ","name":"HP","mkt":"US","return":121.9,"cap":null,"dd":-14.8,"desc":"프린터와 PC·서버를 파는 IT 하드웨어 회사","headline":"계측 사업을 애질런트로 떼어내고 칼리 피오리나를 CEO로 영입","sym":"🖨️","color":"#0096d6"},{"id":"XRX","name":"제록스","mkt":"US","return":-60.7,"cap":null,"dd":-2.6,"desc":"복사기·프린터가 주력인 사무기기 회사","headline":"판매 조직 개편이 실패하며 실적 경고가 연달아 나왔다","sym":"📠","color":"#6b7280"},{"id":"MU","name":"마이크론","mkt":"US","return":120.3,"cap":null,"dd":-8.8,"desc":"D램을 만드는 미국 유일의 대형 메모리 반도체 회사","headline":"대만 지진 여파까지 겹쳐 D램 가격이 급반등","sym":"💾","color":"#0088ce"},{"id":"AMD","name":"AMD","mkt":"US","return":107.6,"cap":null,"dd":-12.5,"desc":"인텔과 경쟁하는 x86 CPU 설계·생산 회사","headline":"애슬론으로 1GHz 경쟁에서 인텔을 먼저 통과했다","sym":"🖥️","color":"#ed1c24"},{"id":"ADBE","name":"어도비","mkt":"US","return":213.6,"cap":null,"dd":-1.3,"desc":"포토샵·아크로뱃을 만드는 소프트웨어 회사","headline":"PDF 확산과 출판 소프트웨어 호조로 실적이 되살아났다","sym":"🎨","color":"#fa0f00"},{"id":"INTU","name":"인튜이트","mkt":"US","return":126.7,"cap":null,"dd":0.0,"desc":"퀵큰·터보택스 등 개인·소상공인 재무 소프트웨어 회사","headline":"세무·가계부 소프트웨어를 웹 서비스로 옮기는 작업에 착수","sym":"🧾","color":"#365ebf"},{"id":"EBAY","name":"이베이","mkt":"US","return":128.1,"cap":null,"dd":-20.3,"desc":"개인 간 경매를 중개하는 온라인 마켓플레이스","headline":"거래액은 급증했지만 하루 가까운 서버 장애로 신뢰 논란","sym":"🏷️","color":"#e53238"},{"id":"NVDA","name":"엔비디아","mkt":"US","return":409.4,"cap":null,"dd":null,"desc":"PC용 3D 그래픽칩을 설계하는 회사. 1999년 1월 상장했다","headline":"1월에 상장하고 10월에 지포스256을 'GPU'라는 새 이름으로 내놨다","sym":"🎮","color":"#76b900"},{"id":"VIAV","name":"비아비(당시 JDS유니페이스)","mkt":"US","return":1482.6,"cap":null,"dd":-0.7,"desc":"광통신용 부품을 만드는 회사(당시 JDS유니페이스)","headline":"광섬유 장비 수요가 폭증했고 연이은 합병으로 몸집을 키웠다","sym":"🔦","color":"#0075c9"},{"id":"MSI","name":"모토로라","mkt":"US","return":153.6,"cap":null,"dd":0.0,"desc":"휴대폰과 통신 장비를 만드는 회사","headline":"위성전화 이리듐이 파산했지만 휴대폰 판매는 회복세","sym":"📻","color":"#0a5ba8"},{"id":"GLW","name":"코닝","mkt":"US","return":325.5,"cap":null,"dd":0.0,"desc":"유리 소재 회사. 광섬유 매출 비중이 빠르게 커졌다","headline":"증설해도 주문이 밀렸다, 통신 소재 회사로 체질을 바꿨다","sym":"🔷","color":"#1f5faa"},{"id":"CIEN","name":"시에나","mkt":"US","return":1073.4,"cap":null,"dd":-83.9,"desc":"광전송 장비(WDM)를 만드는 통신 장비 회사","headline":"대형 고객이 이탈했다가 광통신 투자 붐으로 주문이 돌아왔다","sym":"🔗","color":"#e35205"},{"id":"ADI","name":"아날로그디바이스","mkt":"US","return":487.6,"cap":null,"dd":-22.8,"desc":"아날로그·DSP 반도체를 설계하는 회사","headline":"통신·휴대폰용 아날로그 칩 수요가 한꺼번에 몰렸다","sym":"📐","color":"#0067b1"},{"id":"LRCX","name":"램리서치","mkt":"US","return":737.5,"cap":null,"dd":-40.2,"desc":"반도체 식각 장비를 만드는 회사","headline":"1998년 메모리 불황이 끝나며 장비 발주가 재개됐다","sym":"🪛","color":"#005596"},{"id":"AMAT","name":"어플라이드머티어리얼즈","mkt":"US","return":329.5,"cap":null,"dd":-2.5,"desc":"반도체 전공정 장비 1위 회사","headline":"반도체 설비 투자가 다시 돌아 수주가 급증","sym":"🛠️","color":"#0f4c81"},{"id":"KLAC","name":"KLA","mkt":"US","return":271.6,"cap":null,"dd":-4.7,"desc":"반도체 검사·계측 장비를 만드는 회사","headline":"미세공정 전환으로 검사 장비 수요가 늘었다","sym":"🔬","color":"#0076c0"},{"id":"NTAP","name":"넷앱","mkt":"US","return":968.3,"cap":null,"dd":0.0,"desc":"네트워크 스토리지 장비를 파는 회사","headline":"닷컴 기업들의 데이터 저장 수요로 매출이 매 분기 뛰었다","sym":"🗂️","color":"#0067c5"},{"id":"MSTR","name":"마이크로스트래티지","mkt":"US","return":1776.2,"cap":null,"dd":-32.2,"desc":"기업용 데이터 분석(BI) 소프트웨어 회사","headline":"웹 분석 기대로 폭등, 회계 재작성을 발표하기 열흘 전까지의 기록","sym":"📊","color":"#dd1f26"},{"id":"RMBS","name":"램버스","mkt":"US","return":293.7,"cap":null,"dd":-6.3,"desc":"고속 메모리 인터페이스를 설계하고 특허로 파는 회사","headline":"인텔이 채택한 RD램 기대감, 로열티 소송 전략도 함께","sym":"🔣","color":"#0a4b8c"},{"id":"VRSN","name":"베리사인","mkt":"US","return":1505.0,"cap":null,"dd":-16.2,"desc":"도메인 등록과 인터넷 인증서를 다루는 회사","headline":"닷컴 도메인 등록 폭증, 네트워크솔루션즈 인수를 발표","sym":"🔐","color":"#ff6600"},{"id":"TTWO","name":"테이크투","mkt":"US","return":115.9,"cap":null,"dd":0.0,"desc":"GTA 시리즈를 가진 게임 퍼블리싱·유통 회사","headline":"GTA로 성장했지만 잦은 인수로 회계 부담이 쌓였다","sym":"🕹️","color":"#d6001c"},{"id":"DIS","name":"디즈니","mkt":"US","return":23.9,"cap":null,"dd":-30.0,"desc":"테마파크·영화 스튜디오와 방송(ABC)을 가진 미디어 그룹","headline":"인터넷 포털 Go.com에 돈을 넣었지만 성과가 나오지 않았다","sym":"🏰","color":"#113ccf"},{"id":"KO","name":"코카콜라","mkt":"US","return":-29.7,"cap":null,"dd":-23.3,"desc":"세계 최대 음료 회사. 대표적인 경기 방어주","headline":"유럽 제품 회수 사태와 신흥국 부진이 겹쳐 실적 악화","sym":"🥤","color":"#f40009"},{"id":"PEP","name":"펩시코","mkt":"US","return":-21.4,"cap":null,"dd":-8.0,"desc":"탄산음료와 스낵(프리토레이)을 파는 회사","headline":"보틀링 사업을 따로 상장시켜 몸집을 줄였다","sym":"🥨","color":"#004b93"},{"id":"PG","name":"프록터앤드갬블","mkt":"US","return":-34.8,"cap":null,"dd":-4.0,"desc":"세제·기저귀 등 생활용품 1위 회사","headline":"2000년 3월 구조조정 비용을 이유로 대규모 실적 경고를 냈다","sym":"🧼","color":"#003da5"},{"id":"JNJ","name":"존슨앤드존슨","mkt":"US","return":-10.7,"cap":null,"dd":-7.1,"desc":"제약·의료기기·소비재를 함께 하는 헬스케어 대기업","headline":"실적은 꾸준했지만 시장의 관심은 온통 기술주에 쏠렸다","sym":"🩹","color":"#c8102e"},{"id":"MRK","name":"머크","mkt":"US","return":-16.7,"cap":null,"dd":-5.6,"desc":"바이옥스·조코 등을 파는 대형 제약사","headline":"약가 인하 정치 압박과 특허 만료 우려가 겹쳤다","sym":"⚕️","color":"#00857c"},{"id":"PFE","name":"화이자","mkt":"US","return":-15.6,"cap":null,"dd":-2.1,"desc":"비아그라를 파는 대형 제약사","headline":"워너램버트 인수전에서 이기며 리피토를 손에 넣었다","sym":"💊","color":"#0093d0"},{"id":"LLY","name":"일라이릴리","mkt":"US","return":-29.0,"cap":null,"dd":-5.4,"desc":"프로작으로 알려진 대형 제약사","headline":"프로작 특허 방어 실패 우려에 제약주 소외까지 겹쳤다","sym":"🧪","color":"#d52b1e"},{"id":"BMY","name":"브리스톨마이어스","mkt":"US","return":-16.1,"cap":null,"dd":-2.6,"desc":"항암제·순환기 약이 주력인 대형 제약사","headline":"제약주 전반이 밀리는 흐름을 피하지 못했다","sym":"🧫","color":"#be2bbb"},{"id":"ABT","name":"애보트","mkt":"US","return":-34.6,"cap":null,"dd":-2.0,"desc":"진단기기와 제약을 함께 하는 헬스케어 회사","headline":"진단 사업의 품질 문제로 FDA 제재와 대규모 리콜","sym":"🩺","color":"#00a3e0"},{"id":"MDT","name":"메드트로닉","mkt":"US","return":37.6,"cap":null,"dd":-4.7,"desc":"심장박동기 등을 만드는 의료기기 1위 회사","headline":"심혈관 기기 수요가 늘며 헬스케어 중 드물게 상승","sym":"🫀","color":"#001f5b"},{"id":"AMGN","name":"암젠","mkt":"US","return":119.8,"cap":null,"dd":0.0,"desc":"에포젠·뉴포젠을 파는 세계 최대 바이오텍","headline":"주력 제품 매출 확대에 게놈 열풍이 얹혔다","sym":"🦴","color":"#0063c3"},{"id":"BIIB","name":"바이오젠","mkt":"US","return":511.2,"cap":null,"dd":-2.9,"desc":"다발성경화증 치료제 아보넥스가 주력인 바이오텍","headline":"아보넥스 특허 분쟁에서 이기며 독점 지위를 지켰다","sym":"🧠","color":"#1a3f8b"},{"id":"GILD","name":"길리어드","mkt":"US","return":80.2,"cap":null,"dd":-8.1,"desc":"항바이러스제 중심의 바이오텍","headline":"독감 치료제 타미플루가 승인되며 이름을 알렸다","sym":"🦠","color":"#c8102e"},{"id":"UNH","name":"유나이티드헬스","mkt":"US","return":8.3,"cap":null,"dd":-37.7,"desc":"미국 최대 민간 건강보험사","headline":"관리의료 규제 논란으로 눌렸지만 실적 자체는 개선","sym":"🏥","color":"#002677"},{"id":"XOM","name":"엑슨모빌","mkt":"US","return":13.8,"cap":null,"dd":-4.6,"desc":"엑슨과 모빌이 합쳐 만들어진 세계 최대 석유 회사","headline":"1999년 11월 합병 완료, 유가는 10달러대에서 30달러대로","sym":"🛢️","color":"#ee1c25"},{"id":"CVX","name":"셰브론","mkt":"US","return":5.2,"cap":null,"dd":-7.0,"desc":"미국 2위 석유 회사","headline":"유가는 올랐지만 정유 마진이 따라오지 못했다","sym":"⛽","color":"#0054a4"},{"id":"OXY","name":"옥시덴탈","mkt":"US","return":7.2,"cap":null,"dd":-40.9,"desc":"석유·가스 탐사와 화학을 함께 하는 회사","headline":"유가 반등으로 숨통이 트이자 부채 감축에 집중","sym":"⚗️","color":"#c8102e"},{"id":"SLB","name":"슐룸베르거","mkt":"US","return":83.6,"cap":null,"dd":-43.5,"desc":"유전 서비스 1위 회사","headline":"유가가 오르며 미뤄뒀던 시추 발주가 돌아왔다","sym":"🕳️","color":"#0014dc"},{"id":"HAL","name":"핼리버튼","mkt":"US","return":35.2,"cap":null,"dd":-46.4,"desc":"유전 서비스 2위 회사","headline":"시추 활동은 회복됐지만 드레서 합병 후유증이 남았다","sym":"⚙️","color":"#d10a11"},{"id":"EOG","name":"EOG리소시스","mkt":"US","return":8.0,"cap":null,"dd":-26.3,"desc":"천연가스 중심의 탐사·생산 회사","headline":"엔론에서 완전히 분리 독립해 홀로 서기를 시작했다","sym":"🔥","color":"#c8102e"},{"id":"APA","name":"아파치","mkt":"US","return":73.4,"cap":null,"dd":-35.9,"desc":"석유·가스 탐사·생산 회사","headline":"유가 바닥에서 사들인 유전 자산이 반등과 맞물렸다","sym":"🪨","color":"#0057b8"},{"id":"DVN","name":"데본에너지","mkt":"US","return":43.8,"cap":null,"dd":-23.8,"desc":"석유·가스 탐사·생산 회사","headline":"합병으로 생산량을 키우며 유가 반등 수혜를 키웠다","sym":"💨","color":"#0072ce"},{"id":"GE","name":"제너럴일렉트릭","mkt":"US","return":30.2,"cap":null,"dd":-2.6,"desc":"발전·항공엔진·금융을 함께 하는 복합 기업","headline":"잭 웰치 시대의 끝자락, 제조업체인데 금융(GE캐피털)이 이익을 떠받쳤다","sym":"🌀","color":"#3b73b9"},{"id":"F","name":"포드","mkt":"US","return":-24.8,"cap":null,"dd":-4.1,"desc":"미국 2위 완성차 회사","headline":"SUV·픽업이 잘 팔렸고 볼보 승용차 부문을 인수했다","sym":"🛞","color":"#003478"},{"id":"CAT","name":"캐터필러","mkt":"US","return":-23.4,"cap":null,"dd":-21.0,"desc":"건설·광산 장비 1위 회사","headline":"아시아 금융위기 여파로 장비 수요가 좀처럼 살아나지 않았다","sym":"🚜","color":"#c8a000"},{"id":"DE","name":"디어","mkt":"US","return":10.0,"cap":null,"dd":-46.2,"desc":"농기계 1위 회사","headline":"곡물가 하락으로 농가 투자가 얼어붙었다가 하반기에 회복","sym":"🌾","color":"#367c2b"},{"id":"BA","name":"보잉","mkt":"US","return":4.2,"cap":null,"dd":-40.7,"desc":"민항기와 방산을 함께 하는 제조사","headline":"항공기 인도량이 줄어드는 국면, 자사주 매입으로 방어했다","sym":"🛫","color":"#0033a1"},{"id":"MMM","name":"3M","mkt":"US","return":11.9,"cap":null,"dd":-21.9,"desc":"포스트잇부터 산업 소재까지 만드는 다각화 제조사","headline":"산업 수요는 회복됐지만 굴뚝주로 묶여 밀렸다","sym":"📎","color":"#ff0000"},{"id":"HON","name":"허니웰","mkt":"US","return":2.7,"cap":null,"dd":-6.5,"desc":"항공 부품과 자동제어를 하는 복합 기업","headline":"얼라이드시그널과 합병하고 이름만 허니웰을 남겼다","sym":"🍯","color":"#ee3124"},{"id":"EMR","name":"에머슨일렉트릭","mkt":"US","return":-30.2,"cap":null,"dd":-7.5,"desc":"산업용 모터·자동화 기기를 만드는 회사","headline":"실적은 꾸준했지만 기술주 쏠림에 밀려났다","sym":"🔌","color":"#0074c8"},{"id":"ITW","name":"일리노이툴웍스","mkt":"US","return":-8.9,"cap":null,"dd":-14.7,"desc":"산업용 부품과 접합 기술을 만드는 제조사","headline":"인수를 계속 이어갔는데도 굴뚝주 취급을 벗지 못했다","sym":"🔩","color":"#e4002b"},{"id":"LMT","name":"록히드마틴","mkt":"US","return":-56.2,"cap":null,"dd":-29.9,"desc":"F-16 등을 만드는 미국 최대 방산업체","headline":"실적 경고가 반복되고 부채 부담까지 겹쳤다","sym":"🛡️","color":"#002f6c"},{"id":"RTX","name":"RTX(당시 유나이티드테크)","mkt":"US","return":-9.6,"cap":null,"dd":-3.4,"desc":"항공엔진(P&W)과 엘리베이터(오티스)를 가진 복합 기업","headline":"항공엔진과 엘리베이터 실적이 모두 좋았다","sym":"🛗","color":"#c8102e"},{"id":"WMT","name":"월마트","mkt":"US","return":21.9,"cap":null,"dd":-1.6,"desc":"세계 최대 오프라인 소매 체인","headline":"영국 아스다를 인수하며 유럽으로 넘어갔다","sym":"🛒","color":"#0071ce"},{"id":"HD","name":"홈디포","mkt":"US","return":41.5,"cap":null,"dd":-4.5,"desc":"주택 개보수 자재 1위 소매 체인","headline":"주택 경기 호조로 매장을 늘리며 다우지수에 편입됐다","sym":"🔨","color":"#f96302"},{"id":"LOW","name":"로우스","mkt":"US","return":-8.4,"cap":null,"dd":-1.7,"desc":"홈디포에 이은 2위 주택자재 체인","headline":"금리 인상으로 주택 경기가 꺾일 거란 우려에 눌렸다","sym":"🪜","color":"#004990"},{"id":"TGT","name":"타깃","mkt":"US","return":12.0,"cap":null,"dd":-0.3,"desc":"할인점 타깃을 운영하는 소매 회사(당시 사명 데이턴허드슨)","headline":"할인점에 집중하고 백화점 부문은 정리 수순에 들어갔다","sym":"🎯","color":"#cc0000"},{"id":"COST","name":"코스트코","mkt":"US","return":24.7,"cap":null,"dd":-4.5,"desc":"회원제 창고형 할인점","headline":"회원 수가 꾸준히 늘며 조용히 성장했다","sym":"🏪","color":"#e31837"},{"id":"MCD","name":"맥도날드","mkt":"US","return":-16.4,"cap":null,"dd":-1.8,"desc":"세계 최대 햄버거 프랜차이즈","headline":"미국 내 기존점 매출 성장이 눈에 띄게 둔화됐다","sym":"🍔","color":"#c8102e"},{"id":"SBUX","name":"스타벅스","mkt":"US","return":34.1,"cap":null,"dd":-7.2,"desc":"빠르게 매장을 늘리던 커피 체인","headline":"인터넷 사업 투자를 이유로 든 실적 경고에 하루 20% 넘게 빠지기도","sym":"☕","color":"#00704a"},{"id":"NKE","name":"나이키","mkt":"US","return":-34.9,"cap":null,"dd":-20.7,"desc":"스포츠 용품 1위 브랜드","headline":"아시아 수요 부진과 재고 조정으로 실적이 정체됐다","sym":"👟","color":"#4a4a4a"},{"id":"YUM","name":"얌브랜즈","mkt":"US","return":-41.9,"cap":null,"dd":-4.9,"desc":"KFC·피자헛·타코벨을 운영. 1997년 펩시에서 분사했다","headline":"부채는 줄였지만 매장 매출은 살아나지 않았다","sym":"🍗","color":"#a32638"},{"id":"MO","name":"알트리아","mkt":"US","return":-60.9,"cap":null,"dd":-9.0,"desc":"말보로를 파는 담배 회사. 크래프트도 갖고 있었다","headline":"미국 흡연 소송에서 잇달아 패소하며 배상 부담이 눈덩이로","sym":"🚬","color":"#003da5"},{"id":"JPM","name":"JP모건","mkt":"US","return":15.3,"cap":null,"dd":-5.3,"desc":"기업 금융과 트레이딩이 주력인 투자은행","headline":"글래스-스티걸 폐지로 은행·증권 겸업 시대가 열렸다","sym":"💵","color":"#005eb8"},{"id":"BAC","name":"뱅크오브아메리카","mkt":"US","return":-25.9,"cap":null,"dd":-30.3,"desc":"미국 최대 소매은행","headline":"금리 인상과 대손 우려가 함께 커졌다","sym":"🏦","color":"#e31837"},{"id":"WFC","name":"웰스파고","mkt":"US","return":-15.6,"cap":null,"dd":-6.8,"desc":"서부 기반의 대형 상업은행","headline":"노웨스트와의 합병 통합 작업이 이어졌다","sym":"🐎","color":"#d71e28"},{"id":"C","name":"씨티그룹","mkt":"US","return":52.4,"cap":null,"dd":-30.5,"desc":"은행·보험·증권을 한 지붕에 묶은 금융 그룹","headline":"트래블러스 합병 시너지와 겸업 규제 완화를 동시에 누렸다","sym":"☂️","color":"#056dae"},{"id":"AXP","name":"아메리칸익스프레스","mkt":"US","return":22.0,"cap":null,"dd":-13.6,"desc":"신용카드와 여행 서비스를 파는 회사","headline":"소비 호조로 카드 실적이 개선됐다","sym":"💠","color":"#016fd0"},{"id":"SCHW","name":"찰스슈왑","mkt":"US","return":65.8,"cap":null,"dd":-13.6,"desc":"온라인 증권 중개 회사","headline":"개인 투자 열풍으로 계좌가 폭증, 수수료 인하 경쟁도 함께","sym":"💹","color":"#00a0df"},{"id":"BRK-B","name":"버크셔해서웨이","mkt":"US","return":-39.9,"cap":null,"dd":-13.9,"desc":"버핏이 이끄는 보험·제조 지주회사","headline":"기술주를 한 주도 사지 않아 '버핏은 끝났다'는 말까지 나왔다","sym":"🎩","color":"#1f3864"},{"id":"T","name":"AT&T","mkt":"US","return":-18.5,"cap":null,"dd":-2.8,"desc":"미국 최대 장거리 통신 회사","headline":"케이블 회사를 사들여 몸집을 키웠지만 장거리 통화 매출은 줄었다","sym":"📞","color":"#00a8e0"},{"id":"VZ","name":"버라이즌","mkt":"US","return":16.7,"cap":null,"dd":-13.1,"desc":"지역 유선전화 회사(당시 벨애틀랜틱)","headline":"GTE 합병으로 버라이즌 출범을 준비하고 무선 사업을 합쳤다","sym":"🗼","color":"#ee0000"},{"id":"CMCSA","name":"컴캐스트","mkt":"US","return":37.6,"cap":null,"dd":0.0,"desc":"케이블 TV 사업자","headline":"미디어원 인수전에서는 밀렸지만 케이블 인터넷 기대가 컸다","sym":"🛰️","color":"#f04b23"},{"id":"FDX","name":"페덱스","mkt":"US","return":-22.9,"cap":null,"dd":-4.5,"desc":"항공 특송 회사","headline":"온라인 쇼핑 물량 기대에도 유가 상승이 비용을 갉아먹었다","sym":"🚚","color":"#4d148c"},{"id":"LUV","name":"사우스웨스트항공","mkt":"US","return":19.1,"cap":null,"dd":-0.8,"desc":"미국 저비용 항공사","headline":"저비용 모델로 성장은 이어갔지만 유가 상승이 부담","sym":"✈️","color":"#304cb2"},{"id":"NEM","name":"뉴몬트","mkt":"US","return":35.3,"cap":null,"dd":-48.2,"desc":"세계 최대 금광 회사","headline":"유럽 중앙은행들의 금 매각 제한 합의로 금값이 급등했다","sym":"🥇","color":"#c9a227"},{"id":"FCX","name":"프리포트맥모란","mkt":"US","return":21.1,"cap":null,"dd":-47.5,"desc":"구리·금 광산 회사. 인도네시아 그라스버그 광산이 주력","headline":"구리 가격 반등과 인도네시아 정정 불안이 함께 왔다","sym":"⛏️","color":"#005eb8"}],"stdev":379.2},{"id":"gfc-recovery","title":"금융위기 회복","window":{"start":"2009-03-09","end":"2010-03-09"},"context":"S&P500이 666까지 무너진 그날부터 1년간","cards":[{"id":"005930","name":"삼성전자","mkt":"KR","return":54.2,"cap":null,"dd":-31.8,"desc":"메모리 반도체·휴대폰·가전을 만드는 국내 시가총액 1위 기업","headline":"환율 급등에 힘입어 사상 최대 이익, 반도체 치킨게임에서 살아남았다","sym":"📱","color":"#1428a0"},{"id":"000660","name":"하이닉스","mkt":"KR","return":176.9,"cap":null,"dd":-71.6,"desc":"D램·낸드를 만드는 국내 2위 메모리 회사. 당시 채권단 관리를 받았다","headline":"적자에서 벗어나며 회생, 매각 작업은 인수 후보를 못 찾고 무산","sym":"💾","color":"#ea002c"},{"id":"005380","name":"현대차","mkt":"KR","return":127.7,"cap":null,"dd":-41.8,"desc":"국내 1위 완성차 회사","headline":"미국에서 실직하면 차를 되사주는 마케팅과 원화 약세로 점유율 급상승","sym":"🚗","color":"#002c5f"},{"id":"000270","name":"기아","mkt":"KR","return":264.7,"cap":null,"dd":-56.8,"desc":"현대차그룹의 2위 완성차 회사","headline":"쏘렌토R·K7 등 신차가 연달아 터지며 이익이 급증","sym":"🚙","color":"#05141f"},{"id":"012330","name":"현대모비스","mkt":"KR","return":89.5,"cap":null,"dd":-18.6,"desc":"현대차그룹의 자동차 부품 계열사","headline":"완성차 판매 증가가 그대로 부품 실적으로 넘어왔다","sym":"⚙️","color":"#002c5f"},{"id":"005490","name":"POSCO","mkt":"KR","return":75.2,"cap":null,"dd":-43.7,"desc":"국내 1위 철강 회사","headline":"중국 인프라 부양으로 철강 수요가 살아나 감산에서 증산으로","sym":"🏭","color":"#00a0e9"},{"id":"066570","name":"LG전자","mkt":"KR","return":35.7,"cap":null,"dd":-51.7,"desc":"TV·가전·휴대폰을 만드는 회사","headline":"피처폰 판매는 좋았지만 스마트폰 대응이 늦다는 지적이 나오기 시작","sym":"📺","color":"#a50034"},{"id":"051910","name":"LG화학","mkt":"KR","return":181.8,"cap":null,"dd":-24.6,"desc":"석유화학이 주력이고 2차전지를 키우던 회사","headline":"중국 수요로 화학 마진이 급등, 전기차 배터리 공급도 시작됐다","sym":"🔋","color":"#a50034"},{"id":"006400","name":"삼성SDI","mkt":"KR","return":131.2,"cap":null,"dd":-34.4,"desc":"브라운관에서 2차전지로 무게중심을 옮기던 삼성 계열사","headline":"소형 2차전지 흑자가 커졌고 합작사를 세워 자동차용에 진입","sym":"🔌","color":"#1428a0"},{"id":"009150","name":"삼성전기","mkt":"KR","return":123.0,"cap":null,"dd":-16.6,"desc":"MLCC·기판 등 전자부품을 만드는 회사","headline":"휴대폰·LED 부품 수요가 몰리며 실적이 뛰었다","sym":"🧩","color":"#1428a0"},{"id":"034220","name":"LG디스플레이","mkt":"KR","return":29.9,"cap":null,"dd":-43.8,"desc":"LCD 패널을 만드는 세계 1~2위 회사","headline":"패널 가격이 반등했지만 하반기 들어 다시 꺾였다","sym":"🖼️","color":"#a50034"},{"id":"017670","name":"SK텔레콤","mkt":"KR","return":5.7,"cap":null,"dd":-17.0,"desc":"국내 1위 이동통신사","headline":"가입자가 포화에 이르고 요금 인하 압박이 이어졌다","sym":"📡","color":"#ea002c"},{"id":"030200","name":"KT","mkt":"KR","return":25.4,"cap":null,"dd":-20.3,"desc":"유선전화와 초고속인터넷 1위 통신사","headline":"KTF와 합병해 유무선을 한 회사로 합쳤다","sym":"☎️","color":"#e6002d"},{"id":"015760","name":"한국전력","mkt":"KR","return":59.4,"cap":null,"dd":-30.7,"desc":"전력을 독점 공급하는 공기업","headline":"연료비가 내리며 적자 폭이 줄었고 연말엔 UAE 원전을 수주","sym":"⚡","color":"#005bac"},{"id":"096770","name":"SK에너지","mkt":"KR","return":53.6,"cap":null,"dd":-39.4,"desc":"국내 1위 정유 회사","headline":"정제 마진이 부진해 석유화학과 신사업으로 눈을 돌렸다","sym":"⛽","color":"#ea002c"},{"id":"010950","name":"S-Oil","mkt":"KR","return":11.7,"cap":null,"dd":-26.1,"desc":"국내 3위 정유 회사","headline":"정제 마진이 끝내 살아나지 않아 정유주 중에서도 부진","sym":"🛢️","color":"#e4002b"},{"id":"010130","name":"고려아연","mkt":"KR","return":106.8,"cap":null,"dd":-36.9,"desc":"아연·연을 만드는 비철금속 제련 1위 회사","headline":"비철금속 가격 반등이 그대로 이익으로 이어졌다","sym":"🪙","color":"#8c8c8c"},{"id":"004020","name":"현대제철","mkt":"KR","return":151.1,"cap":null,"dd":-58.4,"desc":"철근·후판을 만드는 2위 철강 회사","headline":"일관제철소 첫 고로에 불을 붙이며 쇳물 생산을 시작했다","sym":"🧲","color":"#00427a"},{"id":"010060","name":"OCI","mkt":"KR","return":-11.0,"cap":null,"dd":-52.0,"desc":"태양광용 폴리실리콘을 만드는 화학 회사","headline":"폴리실리콘 가격이 폭락하며 태양광 특수가 끝났다","sym":"☀️","color":"#00a0e0"},{"id":"055550","name":"신한지주","mkt":"KR","return":116.1,"cap":55850,"dd":-62.9,"desc":"신한은행을 거느린 대표 금융지주사","headline":"대손 충당금 부담이 정점을 지났다","sym":"🏦","color":"#0046ff"},{"id":"105560","name":"KB금융","mkt":"KR","return":99.8,"cap":null,"dd":-62.4,"desc":"국민은행을 거느린 금융지주사","headline":"부실 우려가 걷히며 반등, 지배구조 갈등은 계속됐다","sym":"💳","color":"#b98400"},{"id":"086790","name":"하나금융지주","mkt":"KR","return":110.0,"cap":null,"dd":-64.8,"desc":"하나은행 중심의 금융지주사","headline":"자본을 채운 뒤 부실 우려가 잦아들며 반등","sym":"🏛️","color":"#008485"},{"id":"024110","name":"기업은행","mkt":"KR","return":157.1,"cap":null,"dd":-72.7,"desc":"중소기업 대출이 주력인 국책 은행","headline":"중기 대출 부실 우려가 최고조였다가 빠르게 되돌려졌다","sym":"💴","color":"#004e9e"},{"id":"000810","name":"삼성화재","mkt":"KR","return":29.0,"cap":null,"dd":-37.1,"desc":"국내 1위 손해보험사","headline":"자동차보험 손해율이 오르며 실적이 눌렸다","sym":"🛟","color":"#1428a0"},{"id":"035420","name":"NHN","mkt":"KR","return":34.9,"cap":null,"dd":-41.8,"desc":"네이버와 한게임을 운영하는 인터넷 회사","headline":"검색 광고가 경기 회복과 함께 되살아났다","sym":"🔍","color":"#03c75a"},{"id":"036570","name":"엔씨소프트","mkt":"KR","return":88.2,"cap":null,"dd":-0.5,"desc":"리니지를 서비스하는 게임 회사","headline":"아이온이 흥행하며 위기와 무관하게 실적이 늘었다","sym":"🎮","color":"#6b3fa0"},{"id":"097950","name":"CJ제일제당","mkt":"KR","return":49.1,"cap":null,"dd":-48.6,"desc":"설탕·밀가루와 가공식품을 만드는 식품 회사","headline":"원재료 가격이 내리며 마진이 개선됐다","sym":"🍚","color":"#e4002b"},{"id":"023530","name":"롯데쇼핑","mkt":"KR","return":103.8,"cap":null,"dd":-55.5,"desc":"롯데백화점·롯데마트를 운영하는 유통 회사","headline":"소비가 돌아오고 중국 출점을 늘리며 실적 반등","sym":"🏬","color":"#da291c"},{"id":"004170","name":"신세계","mkt":"KR","return":36.3,"cap":null,"dd":-39.3,"desc":"백화점과 이마트를 함께 하던 유통 회사","headline":"백화점은 회복했지만 대형마트 성장은 눈에 띄게 둔화","sym":"🛍️","color":"#cc0033"},{"id":"051900","name":"LG생활건강","mkt":"KR","return":87.1,"cap":null,"dd":-28.7,"desc":"생활용품과 화장품을 파는 회사","headline":"음료까지 붙이며 세 축으로 꾸준히 성장했다","sym":"💧","color":"#a50034"},{"id":"033780","name":"KT&G","mkt":"KR","return":-11.3,"cap":null,"dd":-19.3,"desc":"담배와 홍삼(정관장)을 파는 회사","headline":"경기와 무관하게 담배 판매량이 일정했다","sym":"🚬","color":"#7a1f2b"},{"id":"090430","name":"아모레퍼시픽","mkt":"KR","return":40.9,"cap":null,"dd":-14.6,"desc":"설화수·라네즈를 만드는 국내 1위 화장품 회사","headline":"화장품 소비는 위기에도 크게 꺾이지 않았다","sym":"💄","color":"#4a4a4a"},{"id":"008770","name":"호텔신라","mkt":"KR","return":68.2,"cap":null,"dd":-53.9,"desc":"호텔과 면세점을 운영하는 회사","headline":"여행 수요가 돌아오고 중국인 관광객이 늘며 면세점이 반등","sym":"🏨","color":"#7d2248"},{"id":"035250","name":"강원랜드","mkt":"KR","return":39.3,"cap":null,"dd":-45.0,"desc":"국내 유일의 내국인 출입 카지노","headline":"방문객이 꾸준해 실적 변동이 작았다","sym":"🎰","color":"#a4783c"},{"id":"009540","name":"현대중공업","mkt":"KR","return":31.5,"cap":null,"dd":-53.7,"desc":"세계 1위 조선사","headline":"신규 수주가 끊겨 쌓아둔 수주 잔고를 까먹는 국면","sym":"🛳️","color":"#0c2c68"},{"id":"034020","name":"두산중공업","mkt":"KR","return":62.0,"cap":null,"dd":-58.4,"desc":"발전 설비와 담수 플랜트를 만드는 회사","headline":"중동 발전 플랜트 수주 기대가 커졌다","sym":"🔧","color":"#f04e23"},{"id":"003490","name":"대한항공","mkt":"KR","return":102.9,"cap":null,"dd":-52.4,"desc":"국내 1위 항공사","headline":"화물 수요가 먼저 돌아오며 적자 폭을 줄였다","sym":"✈️","color":"#00256c"},{"id":"000720","name":"현대건설","mkt":"KR","return":28.1,"cap":44737,"dd":-46.4,"desc":"국내 대표 건설사. 당시 채권단이 지분을 갖고 있었다","headline":"해외 플랜트 수주는 늘었지만 채권단 매각 절차가 남아 있었다","sym":"🏙️","color":"#0e4194"},{"id":"006360","name":"GS건설","mkt":"KR","return":99.6,"cap":null,"dd":-70.5,"desc":"주택과 플랜트를 함께 하는 건설사","headline":"미분양 우려가 걷히고 중동 플랜트 수주가 이어졌다","sym":"🚧","color":"#00a19c"},{"id":"046890","name":"서울반도체","mkt":"KR","return":37.4,"cap":14188,"dd":0.0,"desc":"LED 칩·패키지를 만드는 회사","headline":"LED TV가 쏟아진다는 기대로 위기 중에도 거의 빠지지 않았다","sym":"💡","color":"#e60012"},{"id":"030520","name":"한글과컴퓨터","mkt":"KR","return":43.8,"cap":null,"dd":-36.2,"desc":"아래아한글을 만드는 소프트웨어 회사","headline":"주인이 자주 바뀌는 와중에도 공공 수요로 버텼다","sym":"📝","color":"#0f62fe"},{"id":"011200","name":"현대상선","mkt":"KR","return":33.2,"cap":null,"dd":-48.5,"desc":"컨테이너와 벌크를 운영하는 해운사","headline":"운임 지수가 바닥을 친 뒤에도 적자가 이어졌다","sym":"🚢","color":"#003f7e"},{"id":"AAPL","name":"애플","mkt":"US","return":163.6,"cap":null,"dd":-56.2,"desc":"아이폰·아이팟과 맥을 만드는 회사","headline":"아이폰3GS와 앱스토어가 폭발적으로 컸고 아이패드를 공개했다","sym":"🍎","color":"#6e6e73"},{"id":"MSFT","name":"마이크로소프트","mkt":"US","return":93.0,"cap":null,"dd":-51.3,"desc":"윈도우·오피스와 서버 소프트웨어를 파는 회사","headline":"윈도우7이 비스타의 실패를 만회했다","sym":"🪟","color":"#0078d4"},{"id":"AMZN","name":"아마존","mkt":"US","return":115.1,"cap":null,"dd":-31.3,"desc":"세계 최대 온라인 소매업체. 클라우드도 막 시작했다","headline":"킨들 판매가 늘었고 자포스를 인수했다","sym":"📦","color":"#ff9900"},{"id":"GOOGL","name":"알파벳(구글)","mkt":"US","return":93.4,"cap":null,"dd":-51.1,"desc":"검색 광고가 매출 대부분인 인터넷 회사","headline":"광고 매출이 회복되고 안드로이드 폰이 쏟아지기 시작했다","sym":"🔎","color":"#4285f4"},{"id":"INTC","name":"인텔","mkt":"US","return":70.8,"cap":null,"dd":-48.5,"desc":"PC·서버 CPU 1위 종합 반도체 회사","headline":"PC 수요는 돌아왔지만 EU에서 사상 최대 반독점 과징금을 맞았다","sym":"💻","color":"#0068b5"},{"id":"CSCO","name":"시스코","mkt":"US","return":91.9,"cap":null,"dd":-50.5,"desc":"네트워크 장비 1위 회사","headline":"기업들이 미뤄뒀던 IT 투자를 재개하며 주문이 돌아왔다","sym":"🌐","color":"#1ba0d7"},{"id":"ORCL","name":"오라클","mkt":"US","return":80.0,"cap":null,"dd":-41.1,"desc":"기업용 데이터베이스·소프트웨어 회사","headline":"선마이크로시스템즈를 인수해 하드웨어까지 손에 넣었다","sym":"🗃️","color":"#c74634"},{"id":"QCOM","name":"퀄컴","mkt":"US","return":19.4,"cap":null,"dd":-40.7,"desc":"휴대폰 통신칩과 특허 로열티로 버는 회사","headline":"스마트폰 확산 수혜에도 로열티 분쟁이 발목을 잡았다","sym":"📶","color":"#3253dc"},{"id":"TXN","name":"텍사스인스트루먼트","mkt":"US","return":71.6,"cap":null,"dd":-54.3,"desc":"아날로그 반도체 중심으로 사업을 재편한 회사","headline":"아날로그·임베디드에 집중하며 수요 회복을 그대로 탔다","sym":"🧮","color":"#cc0000"},{"id":"NVDA","name":"엔비디아","mkt":"US","return":103.9,"cap":null,"dd":-66.6,"desc":"PC용 GPU를 설계하는 회사","headline":"노트북 칩 불량 사태 여파가 남았고 신형 아키텍처는 지연됐다","sym":"🎮","color":"#76b900"},{"id":"AMD","name":"AMD","mkt":"US","return":303.7,"cap":null,"dd":-72.5,"desc":"인텔의 경쟁자. CPU와 GPU를 함께 설계한다","headline":"공장을 떼어내 글로벌파운드리로 분사하고 적자를 줄였다","sym":"🖥️","color":"#ed1c24"},{"id":"MU","name":"마이크론","mkt":"US","return":271.7,"cap":null,"dd":-70.8,"desc":"D램·낸드를 만드는 미국 유일의 대형 메모리 회사","headline":"치킨게임이 끝나며 D램 가격이 급반등, 적자에서 벗어났다","sym":"💾","color":"#0088ce"},{"id":"AMAT","name":"어플라이드머티어리얼즈","mkt":"US","return":46.9,"cap":null,"dd":-59.4,"desc":"반도체 전공정 장비 1위 회사","headline":"장비 발주가 바닥을 찍었고 태양광 장비로도 손을 뻗었다","sym":"🛠️","color":"#0f4c81"},{"id":"LRCX","name":"램리서치","mkt":"US","return":82.4,"cap":null,"dd":-56.5,"desc":"반도체 식각 장비를 만드는 회사","headline":"메모리 업체들이 투자를 재개하며 수주가 돌아왔다","sym":"🪛","color":"#005596"},{"id":"KLAC","name":"KLA","mkt":"US","return":97.9,"cap":null,"dd":-65.7,"desc":"반도체 검사·계측 장비 회사","headline":"감산이 끝나자 미뤄뒀던 장비 투자가 한꺼번에 나왔다","sym":"🔬","color":"#0076c0"},{"id":"IBM","name":"IBM","mkt":"US","return":54.3,"cap":null,"dd":-34.8,"desc":"서비스와 소프트웨어 중심으로 재편한 IT 기업","headline":"하드웨어를 줄이고 소프트웨어를 늘려 이익률을 지켰다","sym":"💼","color":"#0f62fe"},{"id":"HPQ","name":"HP","mkt":"US","return":103.7,"cap":null,"dd":-47.6,"desc":"PC·프린터·서버에 IT 서비스를 붙인 회사","headline":"EDS 인수 효과로 서비스 매출이 크게 늘었다","sym":"🖨️","color":"#0096d6"},{"id":"EBAY","name":"이베이","mkt":"US","return":141.9,"cap":null,"dd":-68.8,"desc":"온라인 마켓플레이스와 페이팔을 가진 회사","headline":"본업은 정체됐지만 페이팔이 빠르게 컸고 스카이프는 팔았다","sym":"🏷️","color":"#e53238"},{"id":"BKNG","name":"부킹홀딩스","mkt":"US","return":206.5,"cap":null,"dd":-43.9,"desc":"온라인 여행 예약 회사(당시 프라이스라인)","headline":"유럽 호텔 예약이 폭발적으로 늘며 여행주 중 홀로 질주","sym":"🛎️","color":"#003580"},{"id":"NFLX","name":"넷플릭스","mkt":"US","return":78.4,"cap":null,"dd":-5.4,"desc":"DVD 우편 대여에서 스트리밍으로 넘어가던 회사","headline":"DVD 구독에 스트리밍을 덤으로 얹으며 가입자가 급증했다","sym":"🎬","color":"#e50914"},{"id":"CRM","name":"세일즈포스","mkt":"US","return":136.2,"cap":null,"dd":-58.5,"desc":"구독형 고객관리(CRM) 소프트웨어 회사","headline":"불황에도 구독 매출이 끊기지 않고 늘었다","sym":"☁️","color":"#00a1e0"},{"id":"ADBE","name":"어도비","mkt":"US","return":108.9,"cap":null,"dd":-63.4,"desc":"포토샵·PDF와 플래시를 가진 소프트웨어 회사","headline":"옴니처를 인수했지만 모바일에서 플래시가 밀리기 시작했다","sym":"🎨","color":"#fa0f00"},{"id":"INTU","name":"인튜이트","mkt":"US","return":47.7,"cap":null,"dd":-28.0,"desc":"터보택스·퀵북스 등 재무 소프트웨어 회사","headline":"세무 시즌 수요는 경기와 무관하게 유지됐다","sym":"🧾","color":"#365ebf"},{"id":"V","name":"비자","mkt":"US","return":83.1,"cap":null,"dd":-43.4,"desc":"카드 결제망을 운영하는 회사. 대출 위험은 지지 않는다","headline":"결제 건수는 늘었지만 수수료 규제 논의가 시작됐다","sym":"💳","color":"#1a1f71"},{"id":"MA","name":"마스터카드","mkt":"US","return":73.0,"cap":null,"dd":-55.4,"desc":"비자에 이은 2위 카드 결제망 회사","headline":"해외 결제 회복과 수수료 소송 부담이 함께 왔다","sym":"🔶","color":"#eb001b"},{"id":"JPM","name":"JP모건","mkt":"US","return":169.4,"cap":null,"dd":-67.7,"desc":"위기를 가장 잘 버틴 대형 은행","headline":"베어스턴스와 WaMu를 삼킨 뒤 구제금융을 조기 상환했다","sym":"💵","color":"#005eb8"},{"id":"BAC","name":"뱅크오브아메리카","mkt":"US","return":347.6,"cap":null,"dd":-90.6,"desc":"메릴린치를 인수한 미국 최대 소매은행","headline":"메릴린치 보너스 논란과 CEO 교체를 겪고 구제금융을 갚았다","sym":"🏦","color":"#e31837"},{"id":"WFC","name":"웰스파고","mkt":"US","return":192.0,"cap":null,"dd":-74.2,"desc":"와코비아를 인수한 대형 상업은행","headline":"주택 대출 부실 우려 속에 대규모 증자로 자본을 채웠다","sym":"🐎","color":"#d71e28"},{"id":"C","name":"씨티그룹","mkt":"US","return":239.0,"cap":null,"dd":-95.9,"desc":"정부가 지분을 떠안은 대형 금융그룹","headline":"정부가 우선주를 보통주로 바꿔주며 겨우 살아났다","sym":"☂️","color":"#056dae"},{"id":"GS","name":"골드만삭스","mkt":"US","return":131.8,"cap":null,"dd":-62.7,"desc":"위기를 넘긴 대형 투자은행","headline":"트레이딩으로 사상 최대 이익, 보너스 논란이 뒤따랐다","sym":"🏆","color":"#7399c6"},{"id":"MS","name":"모건스탠리","mkt":"US","return":81.0,"cap":null,"dd":-66.4,"desc":"은행지주로 전환한 투자은행","headline":"리스크를 줄인 대가로 경쟁사보다 이익 회복이 느렸다","sym":"📑","color":"#00a0df"},{"id":"AXP","name":"아메리칸익스프레스","mkt":"US","return":284.8,"cap":null,"dd":-78.9,"desc":"카드 발급과 대출을 함께 하는 회사","headline":"연체율이 정점을 지나자 손실 우려가 빠르게 걷혔다","sym":"💠","color":"#016fd0"},{"id":"BLK","name":"블랙록","mkt":"US","return":144.0,"cap":null,"dd":-59.9,"desc":"세계 최대 자산운용사","headline":"바클레이즈의 iShares를 사들여 ETF 1위가 됐다","sym":"🪨","color":"#3d4b5c"},{"id":"SCHW","name":"찰스슈왑","mkt":"US","return":69.8,"cap":null,"dd":-56.0,"desc":"개인 대상 증권 중개 회사","headline":"제로 금리로 머니마켓 수수료 수입이 말라붙었다","sym":"💹","color":"#00a0df"},{"id":"BRK-B","name":"버크셔해서웨이","mkt":"US","return":79.2,"cap":null,"dd":-50.3,"desc":"버핏이 이끄는 보험·제조 지주회사","headline":"벌링턴노던 철도를 인수하고 B주를 50대 1로 분할했다","sym":"🎩","color":"#1f3864"},{"id":"JNJ","name":"존슨앤드존슨","mkt":"US","return":42.3,"cap":null,"dd":-34.4,"desc":"제약·의료기기·소비재를 함께 하는 헬스케어 대기업","headline":"타이레놀 리콜이 이어졌지만 실적은 흔들리지 않았다","sym":"🩹","color":"#c8102e"},{"id":"PFE","name":"화이자","mkt":"US","return":43.0,"cap":null,"dd":-37.6,"desc":"세계 최대 제약사","headline":"와이어스를 인수해 리피토 특허 만료에 대비했다","sym":"💊","color":"#0093d0"},{"id":"MRK","name":"머크","mkt":"US","return":84.5,"cap":null,"dd":-50.6,"desc":"대형 제약사","headline":"쉐링푸라우와 합병해 비어가던 파이프라인을 채웠다","sym":"⚕️","color":"#00857c"},{"id":"LLY","name":"일라이릴리","mkt":"US","return":32.1,"cap":null,"dd":-44.8,"desc":"정신과·당뇨 약이 주력인 제약사","headline":"자이프렉사에 기댄 구조라 특허 절벽 우려가 컸다","sym":"🧪","color":"#d52b1e"},{"id":"ABT","name":"애보트","mkt":"US","return":20.6,"cap":null,"dd":-20.9,"desc":"진단·의료기기와 제약을 함께 하는 회사","headline":"휴미라 매출은 커졌지만 전체 성장 속도는 완만했다","sym":"🩺","color":"#00a3e0"},{"id":"AMGN","name":"암젠","mkt":"US","return":24.5,"cap":null,"dd":-29.8,"desc":"바이오텍 1위 회사","headline":"골다공증 신약 프롤리아의 승인을 기다리며 보낸 해","sym":"🦴","color":"#0063c3"},{"id":"GILD","name":"길리어드","mkt":"US","return":7.5,"cap":null,"dd":-23.5,"desc":"항바이러스제 중심의 바이오텍","headline":"신종플루가 번지며 타미플루 특수를 봤다","sym":"🦠","color":"#c8102e"},{"id":"BIIB","name":"바이오젠","mkt":"US","return":31.6,"cap":null,"dd":-38.6,"desc":"다발성경화증 치료제가 주력인 바이오텍","headline":"티사브리 부작용 보고가 늘며 성장에 제동이 걸렸다","sym":"🧠","color":"#1a3f8b"},{"id":"UNH","name":"유나이티드헬스","mkt":"US","return":86.3,"cap":null,"dd":-60.5,"desc":"미국 최대 민간 건강보험사","headline":"오바마 의료개혁 논의가 1년 내내 이어졌다","sym":"🏥","color":"#002677"},{"id":"CVS","name":"CVS헬스","mkt":"US","return":46.6,"cap":null,"dd":-45.3,"desc":"약국 체인과 처방약 관리(PBM)를 함께 하는 회사","headline":"PBM 계약이 빠져나가며 성장 기대가 꺾였다","sym":"🧴","color":"#cc0000"},{"id":"WMT","name":"월마트","mkt":"US","return":16.5,"cap":null,"dd":-24.5,"desc":"세계 최대 오프라인 소매 체인","headline":"불황을 틈타 식료품 점유율을 늘렸다","sym":"🛒","color":"#0071ce"},{"id":"COST","name":"코스트코","mkt":"US","return":60.0,"cap":null,"dd":-48.0,"desc":"회원제 창고형 할인점","headline":"회원 갱신률이 유지되며 소비 회복 수혜를 봤다","sym":"🏪","color":"#e31837"},{"id":"TGT","name":"타깃","mkt":"US","return":114.0,"cap":null,"dd":-55.7,"desc":"중산층을 겨냥한 할인점 체인","headline":"소비 회복과 카드 부문 손실 축소가 겹쳤다","sym":"🎯","color":"#cc0000"},{"id":"HD","name":"홈디포","mkt":"US","return":82.1,"cap":null,"dd":-38.9,"desc":"주택 개보수 자재 1위 소매 체인","headline":"주택 시장이 바닥을 찍었다는 기대로 반등","sym":"🔨","color":"#f96302"},{"id":"LOW","name":"로우스","mkt":"US","return":78.1,"cap":null,"dd":-49.6,"desc":"홈디포에 이은 2위 주택자재 체인","headline":"주택 경기 회복이 기대만큼 빠르지 않았다","sym":"🪜","color":"#004990"},{"id":"MCD","name":"맥도날드","mkt":"US","return":28.8,"cap":null,"dd":-18.7,"desc":"세계 최대 햄버거 프랜차이즈","headline":"불황에 강한 저가 메뉴로 버텼지만 회복장에선 밀렸다","sym":"🍔","color":"#c8102e"},{"id":"SBUX","name":"스타벅스","mkt":"US","return":182.0,"cap":null,"dd":-55.5,"desc":"세계 최대 커피 체인","headline":"적자 매장 수백 곳을 닫는 구조조정으로 이익률을 되살렸다","sym":"☕","color":"#00704a"},{"id":"NKE","name":"나이키","mkt":"US","return":81.5,"cap":null,"dd":-44.2,"desc":"스포츠 용품 1위 브랜드","headline":"쌓인 재고를 정리하며 남아공 월드컵 특수를 준비했다","sym":"👟","color":"#4a4a4a"},{"id":"KO","name":"코카콜라","mkt":"US","return":45.4,"cap":null,"dd":-35.5,"desc":"세계 최대 음료 회사","headline":"신흥국 판매가 버텨줬고 방어주답게 변동이 작았다","sym":"🥤","color":"#f40009"},{"id":"PEP","name":"펩시코","mkt":"US","return":44.3,"cap":null,"dd":-36.4,"desc":"음료와 스낵(프리토레이)을 함께 파는 회사","headline":"보틀링 자회사 두 곳을 되사들여 유통을 직접 챙겼다","sym":"🥨","color":"#004b93"},{"id":"PG","name":"프록터앤드갬블","mkt":"US","return":47.6,"cap":null,"dd":-38.8,"desc":"세제·기저귀 등 생활용품 1위 회사","headline":"소비자들이 저가 PB 상품으로 갈아타며 점유율을 뺏겼다","sym":"🧼","color":"#003da5"},{"id":"CL","name":"콜게이트","mkt":"US","return":56.3,"cap":null,"dd":-30.3,"desc":"치약·세제를 파는 생활용품 회사","headline":"신흥국 매출 비중이 커 환율 흐름의 덕을 봤다","sym":"🪥","color":"#c8102e"},{"id":"DIS","name":"디즈니","mkt":"US","return":115.3,"cap":null,"dd":-54.8,"desc":"테마파크·영화와 ESPN을 가진 미디어 그룹","headline":"마블을 인수해 캐릭터 판권을 통째로 사들였다","sym":"🏰","color":"#113ccf"},{"id":"CMCSA","name":"컴캐스트","mkt":"US","return":59.6,"cap":null,"dd":-50.1,"desc":"미국 최대 케이블 TV 사업자","headline":"NBC유니버설 인수를 발표하며 콘텐츠 쪽으로 넘어갔다","sym":"🛰️","color":"#f04b23"},{"id":"T","name":"AT&T","mkt":"US","return":26.5,"cap":null,"dd":-43.3,"desc":"아이폰을 독점 공급하던 통신사","headline":"아이폰 가입자는 늘었지만 망이 못 버틴다는 불만이 커졌다","sym":"📞","color":"#00a8e0"},{"id":"VZ","name":"버라이즌","mkt":"US","return":20.2,"cap":null,"dd":-31.0,"desc":"미국 최대 이동통신사","headline":"알텔을 인수해 가입자를 늘렸지만 아이폰은 경쟁사에 있었다","sym":"🗼","color":"#ee0000"},{"id":"XOM","name":"엑슨모빌","mkt":"US","return":5.5,"cap":null,"dd":-30.6,"desc":"세계 최대 석유 회사","headline":"천연가스 회사 XTO를 인수하며 셰일가스에 베팅했다","sym":"🛢️","color":"#ee1c25"},{"id":"CVX","name":"셰브론","mkt":"US","return":33.0,"cap":null,"dd":-42.0,"desc":"미국 2위 석유 회사","headline":"유가는 회복됐지만 정유 부문 적자가 발목을 잡았다","sym":"⛽","color":"#0054a4"},{"id":"SLB","name":"슐룸베르거","mkt":"US","return":78.3,"cap":null,"dd":-66.2,"desc":"유전 서비스 1위 회사","headline":"시추 발주가 돌아왔고 스미스인터내셔널 인수를 발표했다","sym":"🕳️","color":"#0014dc"},{"id":"OXY","name":"옥시덴탈","mkt":"US","return":64.6,"cap":null,"dd":-47.4,"desc":"석유·가스 탐사·생산 회사","headline":"캘리포니아에서 대형 유전을 찾았다고 발표했다","sym":"⚗️","color":"#c8102e"},{"id":"FCX","name":"프리포트맥모란","mkt":"US","return":149.9,"cap":null,"dd":-73.9,"desc":"구리·금 광산 회사","headline":"중국이 구리를 쓸어담으며 구리값이 두 배로 뛰었다","sym":"⛏️","color":"#005eb8"},{"id":"NEM","name":"뉴몬트","mkt":"US","return":36.0,"cap":null,"dd":-29.0,"desc":"세계 최대 금광 회사","headline":"금값이 온스당 1,000달러를 넘어섰다","sym":"🥇","color":"#c9a227"},{"id":"CAT","name":"캐터필러","mkt":"US","return":156.2,"cap":null,"dd":-71.2,"desc":"건설·광산 장비 1위 회사","headline":"중국 인프라 부양이 굴착기 수요를 되살렸다","sym":"🚜","color":"#c8a000"},{"id":"DE","name":"디어","mkt":"US","return":135.7,"cap":null,"dd":-71.9,"desc":"농기계 1위 회사","headline":"곡물가 회복과 신흥국 수요로 되돌아섰다","sym":"🌾","color":"#367c2b"},{"id":"BA","name":"보잉","mkt":"US","return":124.6,"cap":null,"dd":-63.5,"desc":"민항기와 방산을 함께 하는 제조사","headline":"787 드림라이너가 거듭된 지연 끝에 첫 비행에 성공했다","sym":"🛫","color":"#0033a1"},{"id":"LMT","name":"록히드마틴","mkt":"US","return":43.6,"cap":null,"dd":-50.5,"desc":"미국 최대 방산업체","headline":"F-35 개발 지연과 국방예산 조정 우려가 겹쳤다","sym":"🛡️","color":"#002f6c"},{"id":"HON","name":"허니웰","mkt":"US","return":84.7,"cap":null,"dd":-61.7,"desc":"항공 부품과 자동제어를 하는 복합 기업","headline":"항공 애프터마켓 부진을 비용 절감으로 버텼다","sym":"🍯","color":"#ee3124"},{"id":"MMM","name":"3M","mkt":"US","return":99.0,"cap":null,"dd":-47.6,"desc":"포스트잇부터 산업 소재까지 만드는 다각화 제조사","headline":"산업 수요 회복이 거의 모든 사업부에 고르게 나타났다","sym":"📎","color":"#ff0000"},{"id":"UPS","name":"UPS","mkt":"US","return":61.4,"cap":null,"dd":-47.0,"desc":"세계 최대 물류·특송 회사","headline":"물동량이 돌아오며 적자 노선을 정리했다","sym":"📮","color":"#6b4423"},{"id":"FDX","name":"페덱스","mkt":"US","return":154.1,"cap":null,"dd":-65.0,"desc":"항공 특송 회사","headline":"화물 물동량이 먼저 회복되며 실적이 빠르게 돌아섰다","sym":"🚚","color":"#4d148c"},{"id":"LUV","name":"사우스웨스트항공","mkt":"US","return":143.3,"cap":null,"dd":-68.6,"desc":"미국 대표 저비용 항공사","headline":"유가 헤지 효과는 사라졌지만 국내선 수요가 버텨줬다","sym":"✈️","color":"#304cb2"},{"id":"DAL","name":"델타항공","mkt":"US","return":199.3,"cap":null,"dd":-66.2,"desc":"노스웨스트를 합병한 미국 최대 항공사","headline":"합병 통합 작업 중에 여객 수요가 돌아왔다","sym":"🛩️","color":"#c8102e"},{"id":"CCL","name":"카니발","mkt":"US","return":118.2,"cap":null,"dd":-58.9,"desc":"세계 최대 크루즈 회사","headline":"가격을 크게 낮춰서라도 배를 채웠다","sym":"🛳️","color":"#0066b2"},{"id":"RCL","name":"로열캐리비안","mkt":"US","return":420.3,"cap":null,"dd":-83.6,"desc":"2위 크루즈 회사","headline":"부채 부담이 컸지만 예약이 빠르게 돌아왔다","sym":"⛵","color":"#003d7d"},{"id":"MAR","name":"메리어트","mkt":"US","return":119.1,"cap":null,"dd":-64.4,"desc":"호텔 브랜드를 운영하고 위탁 관리하는 회사","headline":"출장 수요가 끊겼다가 하반기부터 객실 단가가 회복됐다","sym":"🛏️","color":"#a0261a"},{"id":"F","name":"포드","mkt":"US","return":643.1,"cap":null,"dd":-79.5,"desc":"미국 2위 완성차 회사","headline":"GM·크라이슬러가 파산할 때 홀로 정부 돈을 받지 않았다","sym":"🛞","color":"#003478"}],"stdev":87.2},{"id":"covid-rebound","title":"코로나 반등장","window":{"start":"2020-03-19","end":"2021-03-19"},"context":"코스피가 1,457까지 무너진 다음 날부터 1년간","cards":[{"id":"005930","name":"삼성전자","return":90.7,"mkt":"KR","cap":2860800,"dd":-31.2,"sym":"📱","color":"#1428a0","desc":"메모리 반도체·스마트폰·가전을 만드는 국내 시가총액 1위 기업","headline":"동학개미가 가장 많이 사들인 종목, 개인 순매수 1위"},{"id":"000660","name":"SK하이닉스","return":100.0,"mkt":"KR","cap":471961,"dd":-34.3,"sym":"💾","color":"#ea002c","desc":"D램·낸드플래시를 만드는 세계 2위 메모리 반도체 회사","headline":"D램 가격은 내내 약세, 반등 기대는 2021년으로 밀렸다"},{"id":"035420","name":"NAVER","return":179.2,"mkt":"KR","cap":209445,"dd":-24.8,"sym":"🔍","color":"#03c75a","desc":"국내 1위 검색 포털. 커머스·웹툰·클라우드로 사업을 넓히는 중","headline":"언택트로 커머스·웹툰 거래액 급증, 시총 3위 다툼"},{"id":"035720","name":"카카오","return":267.5,"mkt":"KR","cap":109693,"dd":-29.7,"sym":"💬","color":"#8a7000","desc":"카카오톡을 축으로 선물하기·페이·모빌리티·웹툰을 붙인 플랫폼 기업","headline":"선물하기·페이·웹툰 동반 성장, 자회사 상장 기대감"},{"id":"005380","name":"현대차","return":248.3,"mkt":"KR","cap":158291,"dd":-51.5,"sym":"🚗","color":"#002c5f","desc":"국내 1위 완성차 제조사. 판매량 기준 글로벌 5위권","headline":"전용 전기차 플랫폼 E-GMP 공개, 애플카 협업설로 급등"},{"id":"051910","name":"LG화학","return":260.9,"mkt":"KR","cap":168626,"dd":-45.2,"sym":"🔋","color":"#a50034","desc":"석유화학이 본업이지만 전기차 배터리로 무게중심이 옮겨간 회사","headline":"전기차 배터리 흑자 전환, 배터리 사업 분할 발표"},{"id":"006400","name":"삼성SDI","return":261.2,"mkt":"KR","cap":121147,"dd":-46.7,"sym":"🔌","color":"#1428a0","desc":"전기차용 중대형 배터리와 소형 2차전지를 만드는 삼성 계열사","headline":"유럽 전기차 판매 급증으로 중대형 배터리 흑자 전환"},{"id":"068270","name":"셀트리온","return":108.8,"mkt":"KR","cap":178525,"dd":-24.7,"sym":"💊","color":"#0067ac","desc":"바이오시밀러(복제 바이오의약품)를 개발·생산하는 대표 바이오 기업","headline":"코로나 항체치료제 개발 착수, 진단키트 테마 부각"},{"id":"207940","name":"삼성바이오로직스","return":93.4,"mkt":"KR","cap":239620,"dd":-30.9,"sym":"🧬","color":"#1428a0","desc":"글로벌 제약사의 바이오의약품을 대신 생산하는 세계 최대 CMO","headline":"글로벌 제약사 위탁생산 수주 확대, 4공장 증설 발표"},{"id":"005490","name":"POSCO","return":106.8,"mkt":"KR","cap":111761,"dd":-43.5,"sym":"🏭","color":"#00a0e9","desc":"국내 1위 철강사. 자동차·조선·건설 경기에 실적이 직결된다","headline":"상반기 첫 분기 적자, 하반기 중국 인프라 투자로 철강가 반등"},{"id":"012330","name":"현대모비스","return":132.6,"mkt":"KR","cap":120533,"dd":-48.9,"sym":"⚙️","color":"#002c5f","desc":"현대차그룹에 부품·모듈을 공급하는 국내 1위 자동차 부품사","headline":"그룹 전동화 부품 물량 확대, 지배구조 개편 기대"},{"id":"055550","name":"신한지주","return":57.9,"mkt":"KR","cap":105064,"dd":-47.5,"sym":"🏦","color":"#0046ff","desc":"신한은행·신한카드를 거느린 4대 금융지주 중 하나","headline":"저금리와 사모펀드 사태 여파, 금융당국 배당 축소 권고"},{"id":"105560","name":"KB금융","return":90.6,"mkt":"KR","cap":101499,"dd":-46.1,"sym":"💳","color":"#b98400","desc":"국민은행이 주력인 국내 최대 금융지주","headline":"푸르덴셜생명 인수 완료, 연간 순이익 사상 최대"},{"id":"000270","name":"기아","return":288.0,"mkt":"KR","cap":90409,"dd":-48.0,"sym":"🚙","color":"#05141f","desc":"현대차그룹의 또 다른 완성차 회사. SUV·미니밴 비중이 높다","headline":"미국서 텔루라이드·카니발 판매 호조, 전기차 로드맵 발표"},{"id":"017670","name":"SK텔레콤","return":47.1,"mkt":"KR","cap":85056,"dd":-27.5,"sym":"📡","color":"#ea002c","desc":"가입자 기준 국내 1위 이동통신사. 전통적인 고배당주","headline":"5G 가입자 증가에도 통신 본업 성장은 제한적"},{"id":"015760","name":"한국전력","return":48.6,"mkt":"KR","cap":104319,"dd":-43.0,"sym":"⚡","color":"#005bac","desc":"전력을 사서 송배전·판매하는 공기업. 요금은 정부가 정한다","headline":"저유가로 연료비 부담 감소, 요금 체계 개편 논의"},{"id":"032830","name":"삼성생명","return":139.8,"mkt":"KR","cap":57284,"dd":-56.8,"sym":"🛡️","color":"#1428a0","desc":"국내 1위 생명보험사이자 삼성전자 지분을 든 그룹 지배구조의 핵심","headline":"저금리로 운용수익 압박, 지배구조 규제 논의 부각"},{"id":"018260","name":"삼성에스디에스","return":34.2,"mkt":"KR","cap":107516,"dd":-32.5,"sym":"🖥️","color":"#1428a0","desc":"삼성 계열사의 IT 시스템과 물류를 맡는 SI 기업. 매출 대부분이 그룹 내부","headline":"그룹 IT 투자 축소로 실적 부진, 물류 사업 비중 확대"},{"id":"009150","name":"삼성전기","return":127.0,"mkt":"KR","cap":62298,"dd":-41.3,"sym":"🧩","color":"#1428a0","desc":"MLCC·카메라모듈·기판을 만드는 전자부품 회사","headline":"MLCC 수요 회복, 스마트폰 카메라 모듈 공급 확대"},{"id":"011200","name":"HMM","return":951.6,"mkt":"KR","cap":7295,"dd":-41.6,"sym":"🚢","color":"#003f7e","desc":"옛 현대상선. 국내 유일의 대형 컨테이너 해운사로 운임에 실적이 좌우된다","headline":"컨테이너 운임 지수 사상 최고, 10년 만의 흑자 전환"},{"id":"010950","name":"S-Oil","return":58.7,"mkt":"KR","cap":57273,"dd":-46.6,"sym":"🛢️","color":"#e4002b","desc":"원유를 사서 휘발유·경유로 정제해 파는 정유사. 사우디 아람코가 최대주주","headline":"정제마진 마이너스로 대규모 적자, 유가 회복은 더뎠다"},{"id":"090430","name":"아모레퍼시픽","return":50.8,"mkt":"KR","cap":101653,"dd":-32.6,"sym":"💄","color":"#4a4a4a","desc":"설화수·라네즈를 보유한 화장품 회사. 중국인 관광객과 면세점 의존도가 높다","headline":"면세점·오프라인 매출 급감, 중국 온라인 채널로 이동"},{"id":"097950","name":"CJ제일제당","return":171.6,"mkt":"KR","cap":24835,"dd":-43.8,"sym":"🍚","color":"#e4002b","desc":"비비고·햇반을 만드는 국내 1위 식품사. 바이오 소재 사업도 크다","headline":"집밥 수요로 가정간편식 판매 급증, 바이오 사업도 호조"},{"id":"128940","name":"한미약품","return":57.0,"mkt":"KR","cap":25178,"dd":-27.6,"sym":"💉","color":"#00549f","desc":"신약 후보물질을 개발해 글로벌 제약사에 기술수출하는 제약사","headline":"기술수출 계약 일부 권리 반환, 파이프라인 재정비"},{"id":"086790","name":"하나금융지주","return":129.4,"mkt":"KR","cap":54666,"dd":-48.8,"sym":"🏛️","color":"#008485","desc":"하나은행이 주력인 금융지주. 외환은행 합병으로 외환 부문에 강점","headline":"사상 최대 순이익, 저평가 해소와 배당 확대 기대"},{"id":"066570","name":"LG전자","return":250.5,"mkt":"KR","cap":81260,"dd":-38.7,"sym":"📺","color":"#a50034","desc":"가전·TV가 주력인 전자회사. 자동차 전장 사업을 키우는 중","headline":"집콕으로 생활가전 사상 최대 실적, 스마트폰 사업 철수설"},{"id":"096770","name":"SK이노베이션","return":269.1,"mkt":"KR","cap":49244,"dd":-61.7,"sym":"⛽","color":"#ea002c","desc":"정유가 본업이면서 전기차 배터리에 대규모 투자 중인 회사","headline":"정유 부문 사상 최대 적자, 배터리 증설 투자는 계속"},{"id":"028260","name":"삼성물산","return":59.0,"mkt":"KR","cap":125774,"dd":-36.1,"sym":"🏗️","color":"#1428a0","desc":"건설·상사·패션을 하는 삼성그룹 지배구조의 최상단 회사","headline":"해외 수주 지연, 지배구조 개편 기대감은 반복 등장"},{"id":"139480","name":"이마트","return":71.4,"mkt":"KR","cap":28282,"dd":-19.1,"sym":"🛒","color":"#ffb200","desc":"국내 1위 대형마트. 온라인 SSG닷컴을 키우는 중","headline":"오프라인 점포 방문객 감소, 온라인 매출은 급증"},{"id":"036570","name":"엔씨소프트","return":76.0,"mkt":"KR","cap":109179,"dd":-26.4,"sym":"🎮","color":"#6b3fa0","desc":"리니지 시리즈가 매출의 대부분인 게임사","headline":"리니지2M 흥행 지속, 신작 출시 일정은 뒤로 밀렸다"},{"id":"251270","name":"넷마블","return":33.4,"mkt":"KR","cap":74335,"dd":-8.3,"sym":"🕹️","color":"#4a5bd7","desc":"모바일 게임 퍼블리셔. 해외 매출 비중이 높다","headline":"기존 게임 매출 둔화, 대형 신작 공백기"},{"id":"263750","name":"펄어비스","return":83.0,"mkt":"KR","cap":null,"dd":-19.1,"sym":"⚔️","color":"#c8992a","desc":"검은사막을 만든 게임사. 신작 붉은사막을 준비 중","headline":"검은사막 콘솔·해외 확장, 신작 영상 공개로 기대감"},{"id":"247540","name":"에코프로비엠","return":194.3,"mkt":"KR","cap":null,"dd":-40.7,"sym":"🔋","color":"#00a04a","desc":"전기차 배터리에 들어가는 양극재를 만드는 소재 회사","headline":"배터리 수요 급증으로 대규모 양극재 증설 발표"},{"id":"091990","name":"셀트리온헬스케어","return":123.4,"mkt":"KR","cap":null,"dd":-17.1,"sym":"💊","color":"#0067ac","desc":"셀트리온이 만든 바이오시밀러를 해외에 파는 판매 계열사","headline":"유럽 바이오시밀러 점유율 확대, 미국 진출 본격화"},{"id":"003490","name":"대한항공","return":228.8,"mkt":"KR","cap":8852,"dd":-51.2,"sym":"✈️","color":"#00256c","desc":"국내 1위 항공사. 여객이 막히자 화물로 버텼다","headline":"여객 수요 증발했지만 화물 운임 급등으로 영업흑자, 아시아나 인수 발표"},{"id":"009540","name":"한국조선해양","return":78.0,"mkt":"KR","cap":46883,"dd":-49.6,"sym":"🛳️","color":"#0c2c68","desc":"현대중공업그룹의 조선 지주사","headline":"상반기 발주 가뭄, 하반기 수주 회복과 후판값 부담"},{"id":"271560","name":"오리온","return":27.6,"mkt":"KR","cap":40121,"dd":-12.9,"sym":"🍪","color":"#cf0a2c","desc":"초코파이로 유명한 제과사. 중국 매출 비중이 크다","headline":"중국·베트남 매출은 견조, 국내 수요는 정체"},{"id":"096530","name":"씨젠","return":97.5,"mkt":"KR","cap":17466,"dd":0.0,"sym":"🧪","color":"#0a9396","desc":"코로나 PCR 진단키트를 만든 분자진단 기업","headline":"진단키트 수출 급증으로 영업이익이 전년의 수십 배"},{"id":"019170","name":"신풍제약","return":1579.3,"mkt":"KR","cap":3398,"dd":-33.7,"sym":"💉","color":"#1a4f9c","desc":"중견 제약사. 말라리아 치료제 피라맥스를 보유","headline":"피라맥스의 코로나 치료 효과 기대감으로 거래대금 폭증"},{"id":"042700","name":"한미반도체","return":383.9,"mkt":"KR","cap":2647,"dd":-47.0,"sym":"🔩","color":"#005baa","desc":"반도체 후공정 장비를 만드는 장비 회사","headline":"반도체 장비 수주 증가로 사상 최대 실적"},{"id":"003230","name":"삼양식품","return":30.7,"mkt":"KR","cap":5348,"dd":-33.0,"sym":"🍜","color":"#d6001c","desc":"불닭볶음면으로 해외 매출을 키운 라면 회사","headline":"집콕 수요와 수출 증가로 라면 판매 호조"},{"id":"051900","name":"LG생활건강","return":38.4,"mkt":"KR","cap":194901,"dd":-22.9,"sym":"💧","color":"#a50034","desc":"화장품(후·숨)과 생활용품·음료를 함께 하는 회사","headline":"면세 채널은 부진했지만 생활용품·음료가 실적을 방어"},{"id":"033780","name":"KT&G","return":18.4,"mkt":"KR","cap":87165,"dd":-27.3,"sym":"🚬","color":"#7a1f2b","desc":"국내 담배 시장 1위. 정관장 홍삼 사업도 크다","headline":"담배 판매는 견조, 대표적 고배당주로 거론"},{"id":"034020","name":"두산중공업","return":377.4,"mkt":"KR","cap":4809,"dd":-57.5,"sym":"🔧","color":"#f04e23","desc":"발전 설비를 만드는 회사. 탈원전 이후 구조조정을 겪었다","headline":"채권단 지원과 자산 매각, 풍력·수소로 사업 전환 발표"},{"id":"112040","name":"위메이드","return":214.6,"mkt":"KR","cap":2304,"dd":-62.6,"sym":"🎲","color":"#ff5a00","desc":"미르 시리즈로 알려진 게임사. 블록체인 사업을 준비 중","headline":"중국 판권 소송 진행, 신작과 블록체인 계획 공개"},{"id":"196170","name":"알테오젠","return":430.9,"mkt":"KR","cap":7997,"dd":-42.4,"sym":"🧫","color":"#2a9d8f","desc":"정맥주사를 피하주사로 바꾸는 약물전달 기술을 가진 바이오텍","headline":"글로벌 제약사와 대형 기술수출 계약 체결"},{"id":"018880","name":"한온시스템","return":92.3,"mkt":"KR","cap":48575,"dd":-19.5,"sym":"❄️","color":"#005eb8","desc":"자동차 공조(에어컨·히터) 부품 세계 2위 업체","headline":"전기차용 열관리 부품 수주 확대, 대주주 지분 매각설"},{"id":"000720","name":"현대건설","return":118.7,"mkt":"KR","cap":21491,"dd":-54.1,"sym":"🏙️","color":"#0e4194","desc":"국내 대표 건설사. 해외 플랜트 비중이 크다","headline":"해외 수주는 지연, 국내 주택 분양은 호조"},{"id":"010130","name":"고려아연","return":37.0,"mkt":"KR","cap":51873,"dd":-36.3,"sym":"🪙","color":"#8c8c8c","desc":"아연·납·은을 제련하는 세계 1위 비철금속 제련사","headline":"금속 가격 상승, 신사업으로 2차전지 소재 검토"},{"id":"023530","name":"롯데쇼핑","return":110.7,"mkt":"KR","cap":17103,"dd":-56.0,"sym":"🏬","color":"#da291c","desc":"백화점·마트·이커머스를 가진 유통 대기업","headline":"저수익 점포 200여 곳 정리에 들어갔고 온라인 통합몰 롯데온을 열었다"},{"id":"AAPL","name":"애플","return":97.6,"mkt":"US","cap":13772250,"dd":-25.2,"sym":"🍎","color":"#6e6e73","desc":"아이폰·맥과 앱스토어 등 서비스 매출을 가진 세계 최대 시가총액 기업","headline":"아이폰12로 5G 교체 수요, 4:1 액면분할 단행"},{"id":"MSFT","name":"마이크로소프트","return":63.1,"mkt":"US","cap":13566135,"dd":-24.4,"sym":"🪟","color":"#0078d4","desc":"윈도우·오피스와 클라우드(애저)를 파는 소프트웨어 기업","headline":"재택근무 확산으로 팀즈·클라우드 사용량 급증"},{"id":"AMZN","name":"아마존","return":63.5,"mkt":"US","cap":11583645,"dd":-13.3,"sym":"📦","color":"#ff9900","desc":"세계 최대 전자상거래 업체이자 클라우드(AWS) 1위 사업자","headline":"봉쇄로 온라인 주문 폭증, 물류 인력 수십만 명 채용"},{"id":"GOOGL","name":"알파벳(구글)","return":82.3,"mkt":"US","cap":9517096,"dd":-27.1,"sym":"🔎","color":"#4285f4","desc":"검색 광고와 유튜브가 주력. 클라우드도 키우는 중","headline":"상반기 광고 매출 감소 후 하반기 빠르게 회복"},{"id":"META","name":"메타(페이스북)","return":89.5,"mkt":"US","cap":4204008,"dd":-31.4,"sym":"👥","color":"#1877f2","desc":"페이스북·인스타그램의 광고로 매출 대부분을 내는 회사","headline":"이용 시간은 늘었지만 광고주 보이콧과 규제 압박"},{"id":"TSLA","name":"테슬라","return":665.7,"mkt":"US","cap":959645,"dd":-53.4,"sym":"⚡","color":"#cc0000","desc":"전기차 제조사. 자율주행 소프트웨어와 에너지 사업도 한다","headline":"첫 연간 흑자와 S&P500 편입, 5:1 액면분할"},{"id":"NVDA","name":"엔비디아","return":141.6,"mkt":"US","cap":1614749,"dd":-32.3,"sym":"🎮","color":"#76b900","desc":"게임용 GPU와 데이터센터·AI 반도체를 설계하는 회사","headline":"게이밍·데이터센터 수요 동반 급증, ARM 인수 발표"},{"id":"NFLX","name":"넷플릭스","return":54.3,"mkt":"US","cap":1811630,"dd":-14.4,"sym":"🎬","color":"#e50914","desc":"구독형 동영상 스트리밍 1위 사업자","headline":"상반기 가입자 급증, 하반기엔 증가 폭이 크게 둔화"},{"id":"AMD","name":"AMD","return":98.5,"mkt":"US","cap":552967,"dd":-32.4,"sym":"🖥️","color":"#ed1c24","desc":"CPU·GPU를 설계하는 인텔의 경쟁사. 생산은 파운드리에 맡긴다","headline":"라이젠으로 CPU 점유율 확대, 자일링스 인수 발표"},{"id":"ZM","name":"줌","return":163.6,"mkt":"US","cap":421526,"dd":-1.0,"sym":"📹","color":"#2d8cff","desc":"화상회의 소프트웨어 한 가지로 돈을 버는 회사","headline":"이용자 폭증으로 매출 4배, 연말 백신 소식 이후 조정"},{"id":"MRNA","name":"모더나","return":408.5,"mkt":"US","cap":116748,"dd":-10.5,"sym":"💉","color":"#e0195a","desc":"mRNA 기술 기반 바이오텍. 코로나 이전엔 상용 제품이 없었다","headline":"코로나 백신 긴급사용승인, 첫 제품 매출 발생"},{"id":"PFE","name":"화이자","return":28.2,"mkt":"US","cap":1994902,"dd":-25.3,"sym":"💊","color":"#0093d0","desc":"백신부터 만성질환 치료제까지 다루는 글로벌 대형 제약사","headline":"백신 개발에 성공했지만 기존 사업 규모가 커 실적 기여는 제한적"},{"id":"JNJ","name":"존슨앤드존슨","return":29.4,"mkt":"US","cap":4174566,"dd":-17.5,"sym":"🩹","color":"#c8102e","desc":"제약·의료기기·소비재를 함께 하는 헬스케어 대기업","headline":"1회 접종 백신 승인, 한편으로 탈크 소송 부담 지속"},{"id":"BA","name":"보잉","return":161.8,"mkt":"US","cap":684629,"dd":-71.9,"sym":"🛫","color":"#0033a1","desc":"에어버스와 시장을 양분하는 민항기 제조사","headline":"737맥스 운항 재개 승인, 그러나 항공기 주문은 취소 행렬"},{"id":"DAL","name":"델타항공","return":127.8,"mkt":"US","cap":174123,"dd":-65.3,"sym":"🛩️","color":"#c8102e","desc":"미국 3대 항공사 중 하나","headline":"여객 수요 급감으로 대규모 감원, 백신 이후 여행 재개 기대"},{"id":"XOM","name":"엑슨모빌","return":77.6,"mkt":"US","cap":1813671,"dd":-51.4,"sym":"🛢️","color":"#ee1c25","desc":"미국 최대 석유·가스 회사","headline":"유가 급락으로 사상 최대 적자, 다우지수에서 제외"},{"id":"KO","name":"코카콜라","return":25.6,"mkt":"US","cap":2228953,"dd":-30.4,"sym":"🥤","color":"#f40009","desc":"세계 최대 음료 회사. 대표적인 경기 방어주","headline":"식당·극장 등 밖에서 마시는 채널 매출이 크게 줄었다"},{"id":"DIS","name":"디즈니","return":101.3,"mkt":"US","cap":2129012,"dd":-35.9,"sym":"🏰","color":"#113ccf","desc":"테마파크·영화 스튜디오와 스트리밍(디즈니+)을 가진 회사","headline":"테마파크 폐쇄로 적자, 디즈니+ 가입자는 1억 명 돌파"},{"id":"GME","name":"게임스탑","return":4679.7,"mkt":"US","cap":4750,"dd":-33.6,"sym":"🕹️","color":"#e31837","desc":"미국 오프라인 게임 소매 체인. 실적은 몇 년째 내리막이었다","headline":"온라인 커뮤니티발 개인 매수가 몰리며 공매도 세력과 충돌"},{"id":"INTC","name":"인텔","return":42.4,"mkt":"US","cap":2503069,"dd":-32.9,"sym":"💻","color":"#0068b5","desc":"자체 공장을 가진 종합 반도체 기업. PC·서버 CPU가 주력","headline":"7나노 공정 지연 발표, 서버 CPU 점유율 하락"},{"id":"CRM","name":"세일즈포스","return":52.2,"mkt":"US","cap":1554824,"dd":-27.9,"sym":"☁️","color":"#00a1e0","desc":"기업용 고객관리(CRM) 클라우드 소프트웨어 1위","headline":"원격 협업 수요로 매출 증가, 슬랙 인수 발표"},{"id":"ADBE","name":"어도비","return":43.6,"mkt":"US","cap":1858503,"dd":-19.8,"sym":"🎨","color":"#fa0f00","desc":"포토샵·PDF를 구독형으로 파는 소프트웨어 회사","headline":"구독 매출 꾸준히 증가, 디지털 문서 수요 확대"},{"id":"QCOM","name":"퀄컴","return":106.1,"mkt":"US","cap":930006,"dd":-32.2,"sym":"📶","color":"#3253dc","desc":"스마트폰용 통신칩을 설계하고 특허 로열티를 받는 회사","headline":"5G 스마트폰 확산과 특허 분쟁 종결 효과"},{"id":"MU","name":"마이크론","return":149.4,"mkt":"US","cap":501961,"dd":-39.5,"sym":"💾","color":"#0088ce","desc":"미국의 D램·낸드 메모리 제조사","headline":"메모리 가격 바닥 통과, 2021년 업황 반등 전망"},{"id":"AMAT","name":"어플라이드머티어리얼즈","return":189.3,"mkt":"US","cap":462214,"dd":-40.4,"sym":"🛠️","color":"#0f4c81","desc":"반도체 생산 장비를 만드는 세계 최대 장비 회사","headline":"파운드리 증설 경쟁으로 장비 주문 급증"},{"id":"PYPL","name":"페이팔","return":157.5,"mkt":"US","cap":1370486,"dd":-24.4,"sym":"💰","color":"#003087","desc":"온라인 결제 서비스. 벤모도 가지고 있다","headline":"전자상거래 확산으로 결제액 급증, 암호화폐 거래 지원"},{"id":"SHOP","name":"쇼피파이","return":237.1,"mkt":"US","cap":483458,"dd":-38.8,"sym":"🛍️","color":"#96bf48","desc":"누구나 온라인 상점을 열 수 있게 해주는 이커머스 솔루션","headline":"오프라인 상점의 온라인 전환이 몰리며 거래액 폭증"},{"id":"UBER","name":"우버","return":178.6,"mkt":"US","cap":434813,"dd":-50.4,"sym":"🚕","color":"#276ef1","desc":"차량 호출과 음식 배달(우버이츠)을 하는 회사","headline":"차량 호출은 급감, 음식 배달이 그 자리를 메웠다"},{"id":"SNAP","name":"스냅","return":516.3,"mkt":"US","cap":163765,"dd":-50.8,"sym":"👻","color":"#b8b400","desc":"스냅챗을 운영하는 소셜미디어 회사","headline":"10대 이용자 증가와 광고 매출 회복"},{"id":"ETSY","name":"엣시","return":521.5,"mkt":"US","cap":51861,"dd":-44.5,"sym":"🧶","color":"#f56400","desc":"수공예품·빈티지 물건을 파는 온라인 장터","headline":"수제 마스크 판매가 몰리며 거래액 급증"},{"id":"PTON","name":"펠로톤","return":333.4,"mkt":"US","cap":87278,"dd":-25.3,"sym":"🚴","color":"#df2b2b","desc":"인터넷에 연결된 실내 자전거와 구독형 운동 콘텐츠를 파는 회사","headline":"체육관 폐쇄로 주문 폭주, 배송 지연이 문제가 됐다"},{"id":"BYND","name":"비욘드미트","return":143.1,"mkt":"US","cap":43488,"dd":-55.6,"sym":"🌱","color":"#3a7d44","desc":"콩 등으로 만든 식물성 대체육 회사","headline":"식당 채널 매출 감소, 소매 판매로 방향 전환"},{"id":"ROKU","name":"로쿠","return":368.8,"mkt":"US","cap":107693,"dd":-48.3,"sym":"📺","color":"#6f1ab1","desc":"TV용 스트리밍 기기와 광고 플랫폼을 운영하는 회사","headline":"케이블 해지 가속으로 계정 수와 시청 시간 급증"},{"id":"WMT","name":"월마트","return":12.1,"mkt":"US","cap":4229878,"dd":-2.6,"sym":"🛒","color":"#0071ce","desc":"미국 최대 오프라인 소매 체인","headline":"필수품 수요로 매출 증가, 온라인 배송에 대규모 투자"},{"id":"COST","name":"코스트코","return":11.5,"mkt":"US","cap":1676832,"dd":-5.8,"sym":"🏪","color":"#e31837","desc":"연회비를 받고 물건을 싸게 파는 창고형 할인점","headline":"사재기 수요로 매출 증가, 회원 갱신율은 여전히 높다"},{"id":"HD","name":"홈디포","return":83.6,"mkt":"US","cap":2195000,"dd":-34.8,"sym":"🔨","color":"#f96302","desc":"미국 최대 주택 개조·건자재 소매 체인","headline":"집에 머무는 시간이 늘며 집수리 수요 급증"},{"id":"MCD","name":"맥도날드","return":52.5,"mkt":"US","cap":1401713,"dd":-31.3,"sym":"🍔","color":"#c8102e","desc":"세계 최대 패스트푸드 체인","headline":"매장 내 식사 제한, 드라이브스루와 배달로 회복"},{"id":"SBUX","name":"스타벅스","return":76.7,"mkt":"US","cap":904315,"dd":-34.5,"sym":"☕","color":"#00704a","desc":"세계 최대 커피 체인","headline":"매장 폐쇄로 타격, 하반기 중국·미국 매출 회복"},{"id":"NKE","name":"나이키","return":97.2,"mkt":"US","cap":1372177,"dd":-32.7,"sym":"👟","color":"#4a4a4a","desc":"스포츠 의류·운동화 세계 1위","headline":"오프라인 매장은 부진, 온라인 직접판매가 급성장"},{"id":"PG","name":"프록터앤드갬블","return":18.4,"mkt":"US","cap":3453212,"dd":-12.8,"sym":"🧼","color":"#003da5","desc":"세제·기저귀·면도기 등 생활용품 대기업","headline":"위생용품 수요 증가, 대표적인 경기 방어주"},{"id":"UNH","name":"유나이티드헬스","return":68.9,"mkt":"US","cap":2600623,"dd":-28.0,"sym":"🏥","color":"#002677","desc":"미국 최대 건강보험사","headline":"진료가 미뤄지며 보험금 지급 감소, 정책 리스크는 상존"},{"id":"V","name":"비자","return":36.7,"mkt":"US","cap":4205023,"dd":-28.6,"sym":"💳","color":"#1a1f71","desc":"카드 결제망을 운영하며 결제액에 수수료를 붙이는 회사","headline":"온라인 결제는 늘었지만 해외여행 결제가 사라졌다"},{"id":"BAC","name":"뱅크오브아메리카","return":86.4,"mkt":"US","cap":2403509,"dd":-40.5,"sym":"🏦","color":"#e31837","desc":"미국 2위 상업은행","headline":"제로금리로 이자수익 압박, 대손충당금 환입 기대"},{"id":"BRK-B","name":"버크셔해서웨이","return":43.7,"mkt":"US","cap":5289618,"dd":-24.1,"sym":"🎩","color":"#1f3864","desc":"워런 버핏이 이끄는 투자 지주회사","headline":"항공주 전량 매도, 애플 비중은 그대로 유지"},{"id":"CAT","name":"캐터필러","return":124.9,"mkt":"US","cap":714076,"dd":-31.6,"sym":"🚜","color":"#c8a000","desc":"건설·광산 장비를 만드는 세계 1위 중장비 회사","headline":"인프라 투자 기대와 원자재 가격 상승"},{"id":"UPS","name":"UPS","return":70.4,"mkt":"US","cap":1031210,"dd":-18.9,"sym":"📮","color":"#6b4423","desc":"미국 최대 물류·택배 회사","headline":"택배 물량 급증, 백신 배송까지 맡았다"},{"id":"CCL","name":"카니발","return":189.6,"mkt":"US","cap":89190,"dd":-80.7,"sym":"🛳️","color":"#0066b2","desc":"세계 최대 크루즈 선사","headline":"전 세계 운항 중단, 유상증자와 차입으로 버텼다"},{"id":"LUV","name":"사우스웨스트항공","return":97.8,"mkt":"US","cap":206658,"dd":-47.3,"sym":"✈️","color":"#304cb2","desc":"미국 최대 저비용 항공사","headline":"국내선 위주라 국제선 중심 항공사보다 타격이 덜했다"},{"id":"CVX","name":"셰브론","return":90.8,"mkt":"US","cap":1356081,"dd":-52.7,"sym":"⛽","color":"#0054a4","desc":"미국 2위 석유 메이저","headline":"유가 급락으로 적자 전환, 배당은 유지"},{"id":"NVAX","name":"노바백스","return":1871.1,"mkt":"US","cap":3881,"dd":-27.6,"sym":"🧬","color":"#003865","desc":"백신 전문 바이오텍. 코로나 이전엔 승인받은 제품이 없었다","headline":"정부 지원을 받아 백신 개발, 임상 발표마다 급등락"}],"stdev":523.0},{"id":"semi-bio-cycle","title":"반도체·바이오 슈퍼사이클","window":{"start":"2016-11-09","end":"2018-01-29"},"context":"코스피가 사상 최고를 새로 쓰던 15개월. 지수는 올랐는데 내 종목은 왜","cards":[{"id":"005930","name":"삼성전자","mkt":"KR","return":64.5,"cap":1675555,"dd":-6.4,"desc":"메모리 반도체·스마트폰·가전을 만드는 국내 1위 기업","headline":"D램 슈퍼사이클로 인텔을 제치고 반도체 매출 세계 1위에 올랐다","sym":"📱","color":"#1428a0"},{"id":"000660","name":"SK하이닉스","mkt":"KR","return":95.6,"cap":246712,"dd":-7.8,"desc":"D램·낸드를 만드는 국내 2위 메모리 회사","headline":"D램 가격이 두 배로 뛰며 사상 최대 이익, 도시바 인수전에도 참여","sym":"💾","color":"#ea002c"},{"id":"009150","name":"삼성전기","mkt":"KR","return":126.3,"cap":null,"dd":-33.7,"desc":"MLCC·카메라모듈을 만드는 전자부품 회사","headline":"MLCC 품귀로 가격이 뛰며 실적이 급반전했다","sym":"🧩","color":"#1428a0"},{"id":"066570","name":"LG전자","mkt":"KR","return":128.1,"cap":null,"dd":-29.6,"desc":"TV·가전과 휴대폰을 만드는 회사","headline":"가전·TV가 사상 최대 이익을 냈지만 휴대폰 적자는 계속됐다","sym":"📺","color":"#a50034"},{"id":"034220","name":"LG디스플레이","mkt":"KR","return":28.2,"cap":null,"dd":-18.5,"desc":"LCD와 OLED 패널을 만드는 회사","headline":"LCD 호황이 정점을 지나고 중국 증설 우려가 커졌다","sym":"🖼️","color":"#a50034"},{"id":"240810","name":"원익IPS","mkt":"KR","return":53.6,"cap":null,"dd":-11.0,"desc":"반도체 증착 장비를 만드는 회사","headline":"삼성·SK의 설비 투자가 몰리며 수주가 급증했다","sym":"🧱","color":"#0057a8"},{"id":"036930","name":"주성엔지니어링","mkt":"KR","return":41.0,"cap":null,"dd":-15.6,"desc":"반도체·디스플레이 증착 장비를 만드는 회사","headline":"메모리 증설 사이클을 그대로 탔다","sym":"🧰","color":"#005bab"},{"id":"039030","name":"이오테크닉스","mkt":"KR","return":44.9,"cap":7755,"dd":-51.3,"desc":"레이저를 쓰는 반도체 장비를 만드는 회사","headline":"장비 발주는 늘었지만 앞서 많이 오른 탓에 상승 폭은 제한적","sym":"🔆","color":"#c8102e"},{"id":"058470","name":"리노공업","mkt":"KR","return":51.6,"cap":null,"dd":-9.3,"desc":"반도체 검사용 프로브핀·소켓을 만드는 회사","headline":"테스트 소켓 수요가 꾸준히 늘었다","sym":"🧷","color":"#1c6bba"},{"id":"046890","name":"서울반도체","mkt":"KR","return":98.1,"cap":null,"dd":-32.3,"desc":"LED 칩·패키지를 만드는 회사","headline":"자동차·조명용 LED 수요로 오랜 부진을 벗어났다","sym":"💡","color":"#e60012"},{"id":"064760","name":"티씨케이","mkt":"KR","return":143.7,"cap":null,"dd":-29.5,"desc":"반도체 식각 공정용 SiC 부품을 만드는 회사","headline":"고부가 소모품 수요가 늘며 이익률이 크게 뛰었다","sym":"🔘","color":"#4a6572"},{"id":"093370","name":"후성","mkt":"KR","return":43.1,"cap":null,"dd":-8.0,"desc":"반도체용 특수가스와 2차전지 전해질을 만드는 회사","headline":"반도체 가스와 전해질 수요가 함께 늘었다","sym":"💠","color":"#0b6e4f"},{"id":"042700","name":"한미반도체","mkt":"KR","return":139.4,"cap":1271,"dd":-23.1,"desc":"반도체 후공정 장비를 만드는 회사","headline":"패키징 장비 수주가 늘며 이익이 급증했다","sym":"🔩","color":"#005baa"},{"id":"017670","name":"SK텔레콤","mkt":"KR","return":37.0,"cap":58531,"dd":-6.0,"desc":"국내 1위 이동통신사","headline":"통신비 인하 압박 속에 자회사 하이닉스 실적이 버팀목이 됐다","sym":"📡","color":"#ea002c"},{"id":"030200","name":"KT","mkt":"KR","return":0.4,"cap":47934,"dd":-4.8,"desc":"유선과 무선을 함께 하는 통신사","headline":"요금 인하 압박이 이어지고 가입자 성장이 정체됐다","sym":"☎️","color":"#e6002d"},{"id":"032640","name":"LG유플러스","mkt":"KR","return":35.9,"cap":null,"dd":-6.8,"desc":"3위 이동통신사","headline":"무선 가입자를 늘리며 통신 3사 중 가장 선전했다","sym":"📲","color":"#e6007e"},{"id":"015760","name":"한국전력","mkt":"KR","return":-16.5,"cap":null,"dd":-27.0,"desc":"전력을 독점 공급하는 공기업","headline":"탈원전 정책과 연료비 상승으로 이익이 급감했다","sym":"⚡","color":"#005bac"},{"id":"005490","name":"POSCO","mkt":"KR","return":77.2,"cap":130850,"dd":-7.0,"desc":"국내 1위 철강 회사","headline":"중국 감산으로 철강 가격이 오르며 실적이 회복됐다","sym":"🏭","color":"#00a0e9"},{"id":"004020","name":"현대제철","mkt":"KR","return":26.7,"cap":null,"dd":-24.7,"desc":"철근·후판이 주력인 2위 철강 회사","headline":"철강 가격은 올랐지만 자동차 강판 수요가 부진했다","sym":"🧲","color":"#00427a"},{"id":"010130","name":"고려아연","mkt":"KR","return":12.8,"cap":null,"dd":-13.8,"desc":"아연·연을 만드는 비철금속 제련 1위 회사","headline":"제련 수수료가 내리며 상승 폭이 제한됐다","sym":"🪙","color":"#8c8c8c"},{"id":"011170","name":"롯데케미칼","mkt":"KR","return":45.5,"cap":null,"dd":-16.7,"desc":"에틸렌 중심의 대형 석유화학 회사","headline":"화학 시황 호조로 사상 최대 이익을 냈다","sym":"⚗️","color":"#ed1c24"},{"id":"051910","name":"LG화학","mkt":"KR","return":86.3,"cap":157033,"dd":-29.1,"desc":"석유화학과 전기차 배터리를 함께 하는 회사","headline":"화학 호황 위에 배터리 수주 잔고 기대가 얹혔다","sym":"🔋","color":"#a50034"},{"id":"011780","name":"금호석유","mkt":"KR","return":60.0,"cap":null,"dd":-15.1,"desc":"합성고무와 페놀을 만드는 화학 회사","headline":"합성고무 시황이 개선되며 실적이 반등했다","sym":"🛞","color":"#e60012"},{"id":"096770","name":"SK이노베이션","mkt":"KR","return":41.3,"cap":null,"dd":-14.3,"desc":"정유에 화학·배터리를 붙인 회사","headline":"정제 마진 호조로 사상 최대 이익, 배터리 증설도 시작했다","sym":"⛽","color":"#ea002c"},{"id":"010950","name":"S-Oil","mkt":"KR","return":57.7,"cap":null,"dd":-15.2,"desc":"국내 3위 정유 회사","headline":"잔사유 고도화 설비에 대규모 투자를 집행했다","sym":"🛢️","color":"#e4002b"},{"id":"078930","name":"GS","mkt":"KR","return":35.5,"cap":null,"dd":-10.2,"desc":"GS칼텍스를 거느린 지주회사","headline":"정유 자회사 실적이 좋아지며 함께 올랐다","sym":"🏢","color":"#00a19c"},{"id":"005380","name":"현대차","mkt":"KR","return":19.3,"cap":195984,"dd":-15.5,"desc":"국내 1위 완성차 회사","headline":"사드 보복으로 중국 판매가 반토막 났다","sym":"🚗","color":"#002c5f"},{"id":"000270","name":"기아","mkt":"KR","return":-11.4,"cap":110162,"dd":-30.1,"desc":"현대차그룹의 2위 완성차 회사","headline":"통상임금 소송에서 져 대규모 충당금, 중국 판매도 급감했다","sym":"🚙","color":"#05141f"},{"id":"012330","name":"현대모비스","mkt":"KR","return":-4.1,"cap":null,"dd":-8.5,"desc":"현대차그룹의 자동차 부품 계열사","headline":"완성차 판매 부진이 그대로 부품 실적으로 넘어왔다","sym":"⚙️","color":"#002c5f"},{"id":"204320","name":"만도","mkt":"KR","return":14.3,"cap":null,"dd":-14.1,"desc":"브레이크·조향 장치를 만드는 자동차 부품사","headline":"중국 판매 급감의 직격탄을 맞았다","sym":"🛑","color":"#d71920"},{"id":"018880","name":"한온시스템","mkt":"KR","return":29.5,"cap":null,"dd":-19.2,"desc":"자동차 공조(냉난방) 부품 회사","headline":"고객사를 다변화해둔 덕에 현대차 부진을 덜 탔다","sym":"❄️","color":"#005eb8"},{"id":"086280","name":"현대글로비스","mkt":"KR","return":-16.2,"cap":null,"dd":-20.3,"desc":"현대차그룹의 물류 계열사","headline":"완성차 물량 감소와 지배구조 개편 지연이 겹쳤다","sym":"🚚","color":"#002c5f"},{"id":"003490","name":"대한항공","mkt":"KR","return":32.9,"cap":16339,"dd":-13.6,"desc":"국내 1위 항공사","headline":"여객 수요는 늘었지만 사드로 중국 노선이 줄었다","sym":"✈️","color":"#00256c"},{"id":"011200","name":"현대상선","mkt":"KR","return":-35.0,"cap":11519,"dd":-80.1,"desc":"국내 대표 컨테이너 해운사","headline":"한진해운 파산으로 화물을 넘겨받았지만 적자는 계속됐다","sym":"🚢","color":"#003f7e"},{"id":"009540","name":"현대중공업","mkt":"KR","return":50.2,"cap":43415,"dd":-11.3,"desc":"세계 1위 조선사","headline":"수주 절벽 속에 사업부 분할과 자구안을 밀어붙였다","sym":"🛳️","color":"#0c2c68"},{"id":"010140","name":"삼성중공업","mkt":"KR","return":7.1,"cap":36086,"dd":-22.0,"desc":"조선과 해양플랜트를 하는 회사","headline":"해양플랜트 손실이 이어져 대규모 증자를 결정했다","sym":"⛴️","color":"#1428a0"},{"id":"042660","name":"대우조선해양","mkt":"KR","return":-51.7,"cap":null,"dd":-31.7,"desc":"채권단 관리를 받던 조선사","headline":"채무 재조정과 감자를 거쳐 거래가 재개됐다","sym":"⚓","color":"#f37021"},{"id":"034020","name":"두산중공업","mkt":"KR","return":-31.8,"cap":19950,"dd":-19.0,"desc":"발전 설비와 담수 플랜트를 만드는 회사","headline":"탈원전 정책으로 원전 수주가 사라졌다","sym":"🔧","color":"#f04e23"},{"id":"028260","name":"삼성물산","mkt":"KR","return":-3.5,"cap":null,"dd":-14.5,"desc":"삼성그룹 지주 역할을 하던 건설·상사 회사","headline":"제일모직과 합병한 뒤 지배구조 개편 논의가 계속됐다","sym":"🏗️","color":"#1428a0"},{"id":"000720","name":"현대건설","mkt":"KR","return":2.2,"cap":null,"dd":-7.8,"desc":"국내 대표 건설사","headline":"해외 저가 수주 후유증을 털어내는 국면이었다","sym":"🏙️","color":"#0e4194"},{"id":"006360","name":"GS건설","mkt":"KR","return":18.9,"cap":14735,"dd":-17.6,"desc":"주택과 플랜트를 함께 하는 건설사","headline":"주택 분양이 잘 팔리며 실적이 돌아섰다","sym":"🚧","color":"#00a19c"},{"id":"000210","name":"대림산업","mkt":"KR","return":4.2,"cap":null,"dd":-14.5,"desc":"건설과 석유화학을 함께 하는 회사","headline":"주택은 좋았지만 해외 플랜트 손실이 남아 있었다","sym":"🏘️","color":"#00559b"},{"id":"055550","name":"신한지주","mkt":"KR","return":30.6,"cap":null,"dd":-4.6,"desc":"신한은행을 거느린 대표 금융지주사","headline":"금리 인상 기대가 커지며 이자 이익 전망이 밝아졌다","sym":"🏦","color":"#0046ff"},{"id":"105560","name":"KB금융","mkt":"KR","return":76.0,"cap":103941,"dd":-7.4,"desc":"국민은행을 거느린 금융지주사","headline":"현대증권을 인수해 비은행을 채우고 분기마다 순이익 선두를 다퉜다","sym":"💳","color":"#b98400"},{"id":"086790","name":"하나금융지주","mkt":"KR","return":67.7,"cap":null,"dd":-2.4,"desc":"하나은행 중심의 금융지주사","headline":"전산 통합을 끝내고 이익이 정상 궤도로 돌아왔다","sym":"🏛️","color":"#008485"},{"id":"024110","name":"기업은행","mkt":"KR","return":37.9,"cap":null,"dd":-4.3,"desc":"중소기업 대출이 주력인 국책 은행","headline":"금리 상승 수혜를 봤지만 상승 폭은 제한적이었다","sym":"💴","color":"#004e9e"},{"id":"032830","name":"삼성생명","mkt":"KR","return":27.8,"cap":null,"dd":-13.6,"desc":"국내 1위 생명보험사","headline":"새 회계기준 대비 부담과 삼성전자 지분 처분 이슈가 겹쳤다","sym":"🛡️","color":"#1428a0"},{"id":"000810","name":"삼성화재","mkt":"KR","return":3.7,"cap":null,"dd":-10.4,"desc":"국내 1위 손해보험사","headline":"자동차보험 손해율은 좋아졌지만 성장이 정체됐다","sym":"🛟","color":"#1428a0"},{"id":"006800","name":"미래에셋대우","mkt":"KR","return":49.1,"cap":36606,"dd":-28.1,"desc":"국내 최대 증권사","headline":"대우증권을 합병해 자기자본 1위 증권사가 됐다","sym":"📈","color":"#f47216"},{"id":"035420","name":"NAVER","mkt":"KR","return":15.5,"cap":223600,"dd":-10.6,"desc":"국내 1위 검색 포털","headline":"라인 성장은 이어졌지만 투자 확대로 이익률 하락 우려가 커졌다","sym":"🔍","color":"#03c75a"},{"id":"035720","name":"카카오","mkt":"KR","return":97.0,"cap":50803,"dd":-40.9,"desc":"카카오톡을 축으로 사업을 붙이는 플랫폼 기업","headline":"카카오뱅크가 출범하고 멜론 인수 효과가 실적에 들어왔다","sym":"💬","color":"#8a7000"},{"id":"036570","name":"엔씨소프트","mkt":"KR","return":73.9,"cap":50507,"dd":-12.5,"desc":"리니지를 만드는 게임 회사","headline":"리니지M이 모바일에서도 대박을 냈다","sym":"🎮","color":"#6b3fa0"},{"id":"068270","name":"셀트리온","mkt":"KR","return":215.0,"cap":125087,"dd":-15.4,"desc":"바이오시밀러를 만드는 대표 바이오 기업","headline":"램시마 미국 판매가 늘고 코스피 이전 상장 기대가 붙었다","sym":"💊","color":"#0067ac"},{"id":"207940","name":"삼성바이오로직스","mkt":"KR","return":158.8,"cap":105734,"dd":null,"desc":"바이오 의약품을 위탁생산(CMO)하는 회사","headline":"3공장을 지어 세계 최대 생산능력을 갖췄다","sym":"🧬","color":"#1428a0"},{"id":"128940","name":"한미약품","mkt":"KR","return":81.6,"cap":39912,"dd":-56.8,"desc":"신약 기술수출로 주목받던 제약사","headline":"기술수출 계약 해지 여파를 추스르는 국면이었다","sym":"💉","color":"#00549f"},{"id":"000100","name":"유한양행","mkt":"KR","return":18.1,"cap":21515,"dd":-37.6,"desc":"국내 대표 전통 제약사","headline":"제네릭 중심 구조라 바이오 랠리에서 비켜나 있었다","sym":"🌿","color":"#00953a"},{"id":"006280","name":"녹십자","mkt":"KR","return":57.5,"cap":null,"dd":-40.7,"desc":"백신과 혈액제제가 주력인 제약사","headline":"북미 혈액제제 진출이 기대만큼 빠르지 않았다","sym":"🩸","color":"#00954f"},{"id":"069620","name":"대웅제약","mkt":"KR","return":141.9,"cap":7095,"dd":-37.5,"desc":"보툴리눔 톡신 나보타를 키우던 제약사","headline":"나보타 미국 진출 기대로 급등, 균주 분쟁도 시작됐다","sym":"🧴","color":"#0072bc"},{"id":"086520","name":"에코프로","mkt":"KR","return":237.5,"cap":2654,"dd":-18.1,"desc":"2차전지 양극재 소재를 만드는 회사","headline":"전기차 배터리 소재 수요 기대가 붙기 시작했다","sym":"♻️","color":"#00a651"},{"id":"003670","name":"포스코켐텍","mkt":"KR","return":344.0,"cap":null,"dd":-16.6,"desc":"내화물과 음극재를 만드는 포스코 계열사","headline":"음극재 증설로 2차전지 소재주로 다시 평가받았다","sym":"⬛","color":"#0068b7"},{"id":"090430","name":"아모레퍼시픽","mkt":"KR","return":-13.0,"cap":null,"dd":-17.9,"desc":"설화수·라네즈를 만드는 화장품 1위 회사","headline":"사드 보복으로 중국인 관광객이 끊기며 직격탄을 맞았다","sym":"💄","color":"#4a4a4a"},{"id":"051900","name":"LG생활건강","mkt":"KR","return":37.5,"cap":null,"dd":-26.5,"desc":"화장품·생활용품·음료를 함께 하는 회사","headline":"후 브랜드 호조로 사드 충격을 상대적으로 덜 받았다","sym":"💧","color":"#a50034"},{"id":"097950","name":"CJ제일제당","mkt":"KR","return":1.8,"cap":39900,"dd":-13.5,"desc":"가공식품과 사료용 바이오 소재를 만드는 회사","headline":"라이신 가격 부진으로 바이오 부문이 발목을 잡았다","sym":"🍚","color":"#e4002b"},{"id":"139480","name":"이마트","mkt":"KR","return":68.4,"cap":null,"dd":-18.9,"desc":"국내 1위 대형마트","headline":"창고형 트레이더스와 노브랜드가 성장을 이끌었다","sym":"🛒","color":"#ffb200"},{"id":"023530","name":"롯데쇼핑","mkt":"KR","return":7.7,"cap":null,"dd":-16.9,"desc":"백화점과 마트를 운영하는 유통 회사","headline":"중국 롯데마트가 영업정지를 당하며 철수 수순에 들어갔다","sym":"🏬","color":"#da291c"},{"id":"033780","name":"KT&G","mkt":"KR","return":4.2,"cap":null,"dd":-18.2,"desc":"담배와 홍삼(정관장)을 파는 회사","headline":"궐련형 전자담배가 들어오며 점유율 방어에 나섰다","sym":"🚬","color":"#7a1f2b"},{"id":"003230","name":"삼양식품","mkt":"KR","return":64.7,"cap":null,"dd":-1.8,"desc":"불닭볶음면을 만드는 라면 회사","headline":"불닭 수출이 폭발하며 이익 구조 자체가 바뀌었다","sym":"🍜","color":"#d6001c"},{"id":"004370","name":"농심","mkt":"KR","return":8.4,"cap":null,"dd":-43.1,"desc":"신라면을 만드는 국내 1위 라면 회사","headline":"국내 라면 경쟁이 거세지며 점유율이 흔들렸다","sym":"🍲","color":"#d5152a"},{"id":"035250","name":"강원랜드","mkt":"KR","return":-5.2,"cap":null,"dd":-17.4,"desc":"국내 유일의 내국인 출입 카지노","headline":"정부 규제로 영업시간과 테이블 수가 줄었다","sym":"🎰","color":"#a4783c"},{"id":"008770","name":"호텔신라","mkt":"KR","return":90.6,"cap":null,"dd":-51.4,"desc":"면세점과 호텔을 운영하는 회사","headline":"사드로 중국인 관광객이 끊겼지만 따이궁 물량이 그 자리를 메웠다","sym":"🏨","color":"#7d2248"},{"id":"034230","name":"파라다이스","mkt":"KR","return":91.1,"cap":null,"dd":-41.2,"desc":"외국인 전용 카지노를 운영하는 회사","headline":"중국 VIP가 빠졌지만 인천 복합리조트 개장 기대로 반등했다","sym":"🎲","color":"#1a3d7c"},{"id":"NVDA","name":"엔비디아","mkt":"US","return":249.7,"cap":468151,"dd":-3.0,"desc":"게임용 GPU와 데이터센터용 AI 칩을 설계하는 회사","headline":"딥러닝 수요가 터지며 데이터센터 매출이 몇 배로 뛰었다","sym":"🎮","color":"#76b900"},{"id":"AMD","name":"AMD","mkt":"US","return":86.6,"cap":74905,"dd":-9.5,"desc":"CPU와 GPU를 함께 설계하는 인텔·엔비디아의 경쟁사","headline":"라이젠으로 CPU 경쟁에 복귀하고 적자를 줄였다","sym":"🖥️","color":"#ed1c24"},{"id":"MU","name":"마이크론","mkt":"US","return":153.9,"cap":217319,"dd":-4.4,"desc":"D램·낸드를 만드는 미국 유일의 대형 메모리 회사","headline":"메모리 슈퍼사이클로 분기마다 이익 기록을 갈아치웠다","sym":"💾","color":"#0088ce"},{"id":"INTC","name":"인텔","mkt":"US","return":48.2,"cap":1519712,"dd":-8.1,"desc":"PC·서버 CPU 1위 종합 반도체 회사","headline":"데이터센터는 컸지만 10나노 공정이 계속 밀렸다","sym":"💻","color":"#0068b5"},{"id":"AMAT","name":"어플라이드머티어리얼즈","mkt":"US","return":98.5,"cap":319539,"dd":-4.7,"desc":"반도체 전공정 장비 1위 회사","headline":"메모리와 디스플레이 투자가 한꺼번에 몰려 사상 최대 수주","sym":"🛠️","color":"#0f4c81"},{"id":"LRCX","name":"램리서치","mkt":"US","return":110.1,"cap":158330,"dd":-4.1,"desc":"반도체 식각·증착 장비를 만드는 회사","headline":"3D 낸드 적층 경쟁으로 장비 수요가 폭발했다","sym":"🪛","color":"#005596"},{"id":"KLAC","name":"KLA","mkt":"US","return":55.1,"cap":115144,"dd":-2.0,"desc":"반도체 검사·계측 장비를 만드는 회사","headline":"미세공정 전환으로 검사 장비 수요가 늘었다","sym":"🔬","color":"#0076c0"},{"id":"ASML","name":"ASML","mkt":"US","return":101.2,"cap":456709,"dd":-6.5,"desc":"EUV 노광 장비를 독점 공급하는 네덜란드 회사","headline":"EUV 양산 장비 첫 수주를 받으며 독점 지위를 굳혔다","sym":"🔭","color":"#0b5fa5"},{"id":"TSM","name":"TSMC","mkt":"US","return":54.3,"cap":1387585,"dd":-3.0,"desc":"세계 1위 파운드리(반도체 위탁생산) 회사","headline":"아이폰용 칩을 사실상 독점 생산하며 점유율을 키웠다","sym":"🔲","color":"#ea1c2d"},{"id":"QCOM","name":"퀄컴","mkt":"US","return":5.7,"cap":877479,"dd":-3.2,"desc":"스마트폰 통신칩과 특허 로열티로 버는 회사","headline":"애플과 로열티 소송이 터졌고 브로드컴이 인수를 시도했다","sym":"📶","color":"#3253dc"},{"id":"TXN","name":"텍사스인스트루먼트","mkt":"US","return":67.0,"cap":599898,"dd":-2.0,"desc":"아날로그·임베디드 반도체 회사","headline":"산업·자동차용 아날로그 칩 수요가 꾸준히 늘었다","sym":"🧮","color":"#cc0000"},{"id":"AVGO","name":"브로드컴","mkt":"US","return":48.3,"cap":648240,"dd":-2.0,"desc":"인수를 거듭해 몸집을 키운 통신·인프라 반도체 회사","headline":"퀄컴 인수를 시도하며 판을 흔들었다","sym":"🔗","color":"#cc092f"},{"id":"AAPL","name":"애플","mkt":"US","return":57.2,"cap":6003032,"dd":-5.8,"desc":"아이폰과 서비스로 버는 세계 최대 시가총액 기업","headline":"아이폰X를 내놓고 서비스 매출이 새 축으로 자리 잡았다","sym":"🍎","color":"#6e6e73"},{"id":"MSFT","name":"마이크로소프트","mkt":"US","return":60.9,"cap":4696876,"dd":-1.4,"desc":"윈도우·오피스와 클라우드(애저)를 파는 회사","headline":"애저 성장으로 클라우드 2위 자리를 굳혔다","sym":"🪟","color":"#0078d4"},{"id":"AMZN","name":"아마존","mkt":"US","return":81.6,"cap":4227071,"dd":-8.6,"desc":"전자상거래와 클라우드(AWS) 1위 회사","headline":"홀푸드를 인수해 오프라인 식료품에 발을 들였다","sym":"📦","color":"#ff9900"},{"id":"GOOGL","name":"알파벳(구글)","mkt":"US","return":47.4,"cap":6273318,"dd":-3.6,"desc":"검색 광고와 유튜브가 주력인 회사","headline":"유튜브 광고가 커졌지만 EU에서 대형 반독점 과징금을 맞았다","sym":"🔎","color":"#4285f4"},{"id":"META","name":"메타(당시 페이스북)","mkt":"US","return":54.2,"cap":null,"dd":-7.6,"desc":"페이스북·인스타그램 광고로 버는 회사","headline":"광고 매출은 급증했지만 가짜뉴스 논란이 시작됐다","sym":"👥","color":"#1877f2"},{"id":"NFLX","name":"넷플릭스","mkt":"US","return":124.7,"cap":601413,"dd":-6.7,"desc":"구독형 스트리밍 1위 사업자","headline":"오리지널 콘텐츠에 돈을 쏟아부으며 가입자를 늘렸다","sym":"🎬","color":"#e50914"},{"id":"TSLA","name":"테슬라","mkt":"US","return":80.4,"cap":362869,"dd":-28.4,"desc":"전기차 제조사","headline":"모델3 양산이 계획보다 크게 밀리며 '생산 지옥'에 빠졌다","sym":"⚡","color":"#cc0000"},{"id":"CRM","name":"세일즈포스","mkt":"US","return":49.8,"cap":611286,"dd":-9.4,"desc":"구독형 고객관리(CRM) 소프트웨어 회사","headline":"기업들의 클라우드 전환으로 매출이 계속 늘었다","sym":"☁️","color":"#00a1e0"},{"id":"ADBE","name":"어도비","mkt":"US","return":86.6,"cap":606604,"dd":-2.7,"desc":"포토샵·PDF를 구독으로 파는 소프트웨어 회사","headline":"구독 전환이 마무리되며 이익률이 크게 뛰었다","sym":"🎨","color":"#fa0f00"},{"id":"ORCL","name":"오라클","mkt":"US","return":36.0,"cap":1604082,"dd":-4.9,"desc":"기업용 데이터베이스 회사. 클라우드로 옮겨가는 중","headline":"클라우드 전환이 더디다는 평가에 상승 폭이 제한됐다","sym":"🗃️","color":"#c74634"},{"id":"IBM","name":"IBM","mkt":"US","return":12.3,"cap":1046226,"dd":-4.5,"desc":"서비스와 소프트웨어 중심의 IT 기업","headline":"매출이 20분기 넘게 줄어드는 흐름을 끊지 못했다","sym":"💼","color":"#0f62fe"},{"id":"CSCO","name":"시스코","mkt":"US","return":41.6,"cap":1326428,"dd":-0.8,"desc":"네트워크 장비 1위 회사","headline":"장비 매출은 정체됐고 소프트웨어·구독으로 전환을 시작했다","sym":"🌐","color":"#1ba0d7"},{"id":"PYPL","name":"페이팔","mkt":"US","return":107.1,"cap":560117,"dd":-6.5,"desc":"온라인 결제 회사. 2015년 이베이에서 분사했다","headline":"모바일 결제와 벤모가 크며 성장주로 다시 평가받았다","sym":"💰","color":"#003087"},{"id":"SHOP","name":"쇼피파이","mkt":"US","return":218.1,"cap":46306,"dd":-8.8,"desc":"소상공인용 온라인 쇼핑몰을 만들어주는 회사","headline":"가맹점이 급증했지만 공매도 리포트에 흔들리기도 했다","sym":"🛍️","color":"#96bf48"},{"id":"V","name":"비자","mkt":"US","return":53.1,"cap":1988150,"dd":-0.1,"desc":"카드 결제망 1위 회사","headline":"유럽 비자 통합 효과와 현금의 카드 전환이 이어졌다","sym":"💳","color":"#1a1f71"},{"id":"MA","name":"마스터카드","mkt":"US","return":61.9,"cap":1209415,"dd":-0.8,"desc":"2위 카드 결제망 회사","headline":"해외 결제가 늘며 꾸준히 성장했다","sym":"🔶","color":"#eb001b"},{"id":"JPM","name":"JP모건","mkt":"US","return":63.3,"cap":2243739,"dd":0.0,"desc":"미국 최대 은행","headline":"금리 인상과 규제 완화 기대가 함께 커졌다","sym":"💵","color":"#005eb8"},{"id":"GS","name":"골드만삭스","mkt":"US","return":41.4,"cap":695529,"dd":-1.1,"desc":"대형 투자은행","headline":"트레이딩 부진으로 은행주 중에서는 뒤처졌다","sym":"🏆","color":"#7399c6"},{"id":"BRK-B","name":"버크셔해서웨이","mkt":"US","return":43.6,"cap":4256361,"dd":0.0,"desc":"버핏이 이끄는 보험·제조 지주회사","headline":"애플 지분을 크게 늘렸고 법인세 인하로 장부 이익이 불었다","sym":"🎩","color":"#1f3864"},{"id":"JNJ","name":"존슨앤드존슨","mkt":"US","return":24.8,"cap":2807405,"dd":-3.4,"desc":"제약·의료기기·소비재를 함께 하는 헬스케어 대기업","headline":"액텔리온을 인수해 희귀질환 파이프라인을 채웠다","sym":"🩹","color":"#c8102e"},{"id":"PFE","name":"화이자","mkt":"US","return":26.2,"cap":1326301,"dd":-12.3,"desc":"세계 최대 제약사","headline":"약가 인하 압박 속에 대형 인수는 미뤄뒀다","sym":"💊","color":"#0093d0"},{"id":"LLY","name":"일라이릴리","mkt":"US","return":14.7,"cap":800161,"dd":-7.7,"desc":"당뇨·항암 약이 주력인 제약사","headline":"기대를 걸었던 알츠하이머 신약이 임상에 실패했다","sym":"🧪","color":"#d52b1e"},{"id":"UNH","name":"유나이티드헬스","mkt":"US","return":78.5,"cap":1328477,"dd":-2.4,"desc":"미국 최대 민간 건강보험사","headline":"옵텀을 키워 보험 너머 의료비 관리 사업까지 넓혔다","sym":"🏥","color":"#002677"},{"id":"XOM","name":"엑슨모빌","mkt":"US","return":7.1,"cap":2728225,"dd":-7.7,"desc":"세계 최대 석유 회사","headline":"유가는 회복됐지만 생산량이 좀처럼 늘지 않았다","sym":"🛢️","color":"#ee1c25"},{"id":"CVX","name":"셰브론","mkt":"US","return":28.0,"cap":1526921,"dd":0.0,"desc":"미국 2위 석유 회사","headline":"퍼미안 셰일 생산이 늘며 유가 회복 수혜를 봤다","sym":"⛽","color":"#0054a4"},{"id":"CAT","name":"캐터필러","mkt":"US","return":89.6,"cap":497383,"dd":0.0,"desc":"건설·광산 장비 1위 회사","headline":"중국과 원자재 투자가 살아나며 장비 판매가 급증했다","sym":"🚜","color":"#c8a000"},{"id":"BA","name":"보잉","mkt":"US","return":143.2,"cap":908059,"dd":0.0,"desc":"민항기와 방산을 함께 하는 제조사","headline":"737 인도량이 사상 최대를 찍고 현금흐름이 크게 개선됐다","sym":"🛫","color":"#0033a1"},{"id":"WMT","name":"월마트","mkt":"US","return":57.5,"cap":2058179,"dd":-4.3,"desc":"세계 최대 오프라인 소매 체인","headline":"제트닷컴 인수 뒤 온라인 매출이 빠르게 늘었다","sym":"🛒","color":"#0071ce"},{"id":"KO","name":"코카콜라","mkt":"US","return":19.7,"cap":1516607,"dd":-8.4,"desc":"세계 최대 음료 회사","headline":"설탕 규제 흐름에 맞춰 저당·무당 제품으로 옮겨갔다","sym":"🥤","color":"#f40009"},{"id":"PG","name":"프록터앤드갬블","mkt":"US","return":6.1,"cap":1907263,"dd":-3.8,"desc":"세제·기저귀 등 생활용품 1위 회사","headline":"행동주의 투자자와 이사회 자리를 두고 표 대결을 벌였다","sym":"🧼","color":"#003da5"},{"id":"DIS","name":"디즈니","mkt":"US","return":21.3,"cap":1544956,"dd":-20.1,"desc":"테마파크·영화와 ESPN을 가진 미디어 그룹","headline":"ESPN 가입자가 빠지자 21세기폭스 인수를 발표했다","sym":"🏰","color":"#113ccf"},{"id":"GE","name":"제너럴일렉트릭","mkt":"US","return":-43.3,"cap":2646157,"dd":-9.3,"desc":"발전·항공엔진·의료기기를 하는 복합 기업","headline":"발전 사업이 무너지며 배당을 반토막 냈다","sym":"🌀","color":"#3b73b9"}],"stdev":60.7},{"id":"ai-rally","title":"AI 랠리","window":{"start":"2023-01-03","end":"2024-01-03"},"context":"챗GPT 공개 직후부터 1년간. AI라고 다 오르지는 않았다","cards":[{"id":"005930","name":"삼성전자","mkt":"KR","return":46.7,"cap":3443615,"dd":-28.1,"desc":"메모리 반도체와 스마트폰을 만드는 국내 1위 기업","headline":"메모리 적자 끝에 감산을 결정했고 HBM에서는 경쟁사에 뒤졌다","sym":"📱","color":"#1428a0"},{"id":"000660","name":"SK하이닉스","mkt":"KR","return":90.4,"cap":520645,"dd":-42.4,"desc":"D램·낸드를 만드는 국내 2위 메모리 회사","headline":"HBM을 엔비디아에 사실상 독점 공급하며 판이 뒤집혔다","sym":"💾","color":"#ea002c"},{"id":"042700","name":"한미반도체","mkt":"KR","return":417.4,"cap":11261,"dd":-37.3,"desc":"반도체 후공정 장비를 만드는 회사","headline":"HBM 본딩 장비 공급사로 지목됐다","sym":"🔩","color":"#005baa"},{"id":"086520","name":"에코프로","mkt":"KR","return":459.6,"cap":29962,"dd":-20.9,"desc":"2차전지 양극재 계열사를 거느린 지주회사","headline":"2차전지 소재 기대로 개인 매수가 몰렸다","sym":"♻️","color":"#00a651"},{"id":"247540","name":"에코프로비엠","mkt":"KR","return":204.2,"cap":null,"dd":-31.1,"desc":"하이니켈 양극재를 만드는 회사","headline":"양극재 증설 계획을 잇달아 내놨다","sym":"🔋","color":"#00a04a"},{"id":"003670","name":"포스코퓨처엠","mkt":"KR","return":87.7,"cap":144874,"dd":-20.4,"desc":"양극재와 음극재를 함께 만드는 포스코 계열사","headline":"포스코그룹 2차전지 테마의 한복판에 섰다","sym":"⬛","color":"#0068b7"},{"id":"373220","name":"LG에너지솔루션","mkt":"KR","return":-2.5,"cap":1030770,"dd":-29.4,"desc":"국내 1위 전기차 배터리 제조사","headline":"미국 보조금은 받았지만 전기차 수요 둔화가 발목을 잡았다","sym":"🔋","color":"#a50034"},{"id":"006400","name":"삼성SDI","mkt":"KR","return":-22.6,"cap":397652,"dd":-20.3,"desc":"전기차용과 소형 배터리를 만드는 회사","headline":"수주는 늘었지만 전기차 판매 성장세가 꺾였다","sym":"🔌","color":"#1428a0"},{"id":"051910","name":"LG화학","mkt":"KR","return":-17.3,"cap":443750,"dd":-21.0,"desc":"석유화학과 배터리 자회사 지분을 가진 회사","headline":"화학 시황이 부진했고 배터리 자회사 실적도 눌렸다","sym":"🔋","color":"#a50034"},{"id":"005490","name":"POSCO홀딩스","mkt":"KR","return":82.8,"cap":187431,"dd":-9.0,"desc":"철강과 2차전지 소재를 함께 하는 지주회사","headline":"리튬 사업에 투자하며 2차전지 소재로 무게를 옮겼다","sym":"🏭","color":"#00a0e9"},{"id":"010130","name":"고려아연","mkt":"KR","return":-4.7,"cap":101548,"dd":-18.9,"desc":"아연·연을 만드는 비철금속 제련 1위 회사","headline":"경영권을 둘러싼 지분 경쟁이 불거졌다","sym":"🪙","color":"#8c8c8c"},{"id":"005380","name":"현대차","mkt":"KR","return":28.0,"cap":321251,"dd":-22.7,"desc":"국내 1위 완성차 회사","headline":"하이브리드와 제네시스가 잘 팔리며 사상 최대 이익","sym":"🚗","color":"#002c5f"},{"id":"000270","name":"기아","mkt":"KR","return":56.4,"cap":211210,"dd":-23.9,"desc":"현대차그룹의 2위 완성차 회사","headline":"북미 판매 호조로 사상 최대 이익, 저평가 해소 기대가 붙었다","sym":"🚙","color":"#05141f"},{"id":"012330","name":"현대모비스","mkt":"KR","return":17.3,"cap":173331,"dd":-23.6,"desc":"현대차그룹의 자동차 부품 계열사","headline":"완성차는 사상 최대 이익인데 부품 이익률은 제자리였다","sym":"⚙️","color":"#002c5f"},{"id":"035420","name":"NAVER","mkt":"KR","return":28.2,"cap":263434,"dd":-50.9,"desc":"국내 1위 검색 포털","headline":"자체 AI 하이퍼클로바X를 공개했지만 광고 경기가 받쳐주지 않았다","sym":"🔍","color":"#03c75a"},{"id":"035720","name":"카카오","mkt":"KR","return":8.6,"cap":233117,"dd":-52.1,"desc":"카카오톡을 축으로 사업을 붙인 플랫폼 기업","headline":"SM엔터를 품었지만 본업인 광고·커머스는 부진했다","sym":"💬","color":"#8a7000"},{"id":"036570","name":"엔씨소프트","mkt":"KR","return":-46.4,"cap":89733,"dd":-29.8,"desc":"리니지 시리즈를 만드는 게임 회사","headline":"리니지 매출이 꺾이고 신작마저 부진했다","sym":"🎮","color":"#6b3fa0"},{"id":"251270","name":"넷마블","mkt":"KR","return":5.8,"cap":43862,"dd":-55.4,"desc":"모바일 게임 퍼블리셔","headline":"신작이 잇달아 부진하며 적자가 이어졌다","sym":"🕹️","color":"#4a5bd7"},{"id":"263750","name":"펄어비스","mkt":"KR","return":-5.9,"cap":null,"dd":-68.6,"desc":"검은사막을 만든 게임 회사","headline":"기대작 붉은사막 출시가 또 미뤄졌다","sym":"⚔️","color":"#c8992a"},{"id":"112040","name":"위메이드","mkt":"KR","return":90.6,"cap":null,"dd":-80.6,"desc":"미르 IP와 블록체인 게임을 하는 회사","headline":"코인 시세 반등과 신작 기대가 함께 왔다","sym":"🎲","color":"#ff5a00"},{"id":"068270","name":"셀트리온","mkt":"KR","return":46.0,"cap":225297,"dd":-22.0,"desc":"바이오시밀러를 만드는 대표 바이오 기업","headline":"셀트리온헬스케어와 합병해 개발·유통 구조를 하나로 합쳤다","sym":"💊","color":"#0067ac"},{"id":"207940","name":"삼성바이오로직스","mkt":"KR","return":-1.7,"cap":571526,"dd":-11.8,"desc":"바이오 의약품 위탁생산(CMO) 1위 회사","headline":"위탁 생산 수주가 1년 내내 꾸준히 늘었다","sym":"🧬","color":"#1428a0"},{"id":"000100","name":"유한양행","mkt":"KR","return":28.9,"cap":38634,"dd":-5.6,"desc":"국내 대표 전통 제약사","headline":"폐암 신약 렉라자의 병용 임상 결과로 기대가 커졌다","sym":"🌿","color":"#00953a"},{"id":"196170","name":"알테오젠","mkt":"KR","return":152.1,"cap":null,"dd":-43.1,"desc":"피하주사 변환 기술을 파는 바이오텍","headline":"글로벌 제약사와의 기술 계약 기대가 커졌다","sym":"🧫","color":"#2a9d8f"},{"id":"128940","name":"한미약품","mkt":"KR","return":31.8,"cap":33852,"dd":-12.5,"desc":"신약 개발 중심의 제약사","headline":"비만 치료제 파이프라인이 부각됐다","sym":"💉","color":"#00549f"},{"id":"012450","name":"한화에어로스페이스","mkt":"KR","return":84.3,"cap":38789,"dd":-15.3,"desc":"항공엔진과 지상 무기를 만드는 방산 회사","headline":"폴란드에 판 K9·천무가 실적으로 들어오기 시작했다","sym":"🚀","color":"#f37021"},{"id":"047810","name":"한국항공우주","mkt":"KR","return":10.3,"cap":44913,"dd":-23.8,"desc":"군용기와 항공기 부품을 만드는 회사","headline":"FA-50 수출은 늘었지만 추가 수주는 더뎠다","sym":"🚁","color":"#003a70"},{"id":"079550","name":"LIG넥스원","mkt":"KR","return":60.2,"cap":17186,"dd":-24.2,"desc":"유도무기와 감시정찰 장비를 만드는 방산 회사","headline":"중동에 천궁II를 팔며 수주 잔고가 크게 늘었다","sym":"🛰️","color":"#003876"},{"id":"064350","name":"현대로템","mkt":"KR","return":-0.5,"cap":29201,"dd":-15.6,"desc":"K2 전차와 철도차량을 만드는 회사","headline":"기대하던 폴란드 전차 2차 계약이 해를 넘겼다","sym":"🚄","color":"#002c5f"},{"id":"009540","name":"HD한국조선해양","mkt":"KR","return":70.5,"cap":45907,"dd":-32.2,"desc":"국내 1위 조선 지주회사","headline":"비싸게 받아둔 수주 물량이 실적으로 들어오기 시작했다","sym":"🛳️","color":"#0c2c68"},{"id":"010140","name":"삼성중공업","mkt":"KR","return":58.3,"cap":42578,"dd":-21.8,"desc":"조선과 해양을 하는 회사","headline":"오랜 적자를 벗고 흑자로 돌아섰다","sym":"⛴️","color":"#1428a0"},{"id":"042660","name":"한화오션","mkt":"KR","return":61.8,"cap":34113,"dd":-35.7,"desc":"한화에 인수된 옛 대우조선해양","headline":"주인이 바뀌며 회사 이름도 한화오션으로 달았다","sym":"⚓","color":"#f37021"},{"id":"011200","name":"HMM","mkt":"KR","return":12.2,"cap":87598,"dd":-41.6,"desc":"국내 1위 컨테이너 해운사","headline":"운임이 급락하는 가운데 매각 절차가 진행됐다","sym":"🚢","color":"#003f7e"},{"id":"352820","name":"하이브","mkt":"KR","return":37.3,"cap":73122,"dd":-47.7,"desc":"BTS가 속한 멀티 레이블 기획사","headline":"BTS 군 입대 공백을 다른 레이블 아티스트로 메웠다","sym":"🎤","color":"#8b5cf6"},{"id":"035900","name":"JYP Ent.","mkt":"KR","return":50.0,"cap":21906,"dd":0.0,"desc":"트와이스·스트레이키즈가 속한 기획사","headline":"해외 앨범 판매가 늘며 실적 신기록을 냈다","sym":"🎵","color":"#6e2fa8"},{"id":"041510","name":"에스엠","mkt":"KR","return":22.5,"cap":null,"dd":-8.7,"desc":"SM엔터. 대형 아이돌 기획사","headline":"하이브와 카카오가 경영권을 두고 정면으로 맞붙었다","sym":"🎧","color":"#e6007e"},{"id":"090430","name":"아모레퍼시픽","mkt":"KR","return":6.9,"cap":79873,"dd":-29.7,"desc":"설화수·라네즈를 만드는 화장품 회사","headline":"중국 리오프닝 기대가 끝내 실적으로 이어지지 않았다","sym":"💄","color":"#4a4a4a"},{"id":"051900","name":"LG생활건강","mkt":"KR","return":-49.5,"cap":106652,"dd":-35.5,"desc":"화장품·생활용품·음료를 함께 하는 회사","headline":"중국 화장품 부진이 예상보다 길어졌다","sym":"💧","color":"#a50034"},{"id":"097950","name":"CJ제일제당","mkt":"KR","return":-11.6,"cap":49947,"dd":-13.1,"desc":"가공식품과 바이오 소재를 만드는 회사","headline":"해외 식품은 잘 됐지만 바이오 부문이 발목을 잡았다","sym":"🍚","color":"#e4002b"},{"id":"003230","name":"삼양식품","mkt":"KR","return":92.6,"cap":8987,"dd":-4.3,"desc":"불닭볶음면을 만드는 라면 회사","headline":"불닭 수출이 계속 늘며 사상 최대 실적","sym":"🍜","color":"#d6001c"},{"id":"033780","name":"KT&G","mkt":"KR","return":6.6,"cap":87891,"dd":-6.1,"desc":"담배와 홍삼을 파는 회사","headline":"행동주의 펀드가 지배구조 개선을 요구하고 나섰다","sym":"🚬","color":"#7a1f2b"},{"id":"055550","name":"신한지주","mkt":"KR","return":17.5,"cap":155144,"dd":-15.2,"desc":"신한은행을 거느린 대표 금융지주사","headline":"고금리로 이자 이익은 늘었지만 상생금융 부담이 붙었다","sym":"🏦","color":"#0046ff"},{"id":"105560","name":"KB금융","mkt":"KR","return":12.6,"cap":165383,"dd":-21.0,"desc":"국민은행을 거느린 금융지주사","headline":"이자 이익은 늘었지만 부동산 PF 부실 우려가 커졌다","sym":"💳","color":"#b98400"},{"id":"034020","name":"두산에너빌리티","mkt":"KR","return":6.0,"cap":96710,"dd":-35.3,"desc":"발전 설비를 만드는 회사(옛 두산중공업)","headline":"원전 생태계 복원 기대에 비해 실적 반영은 더뎠다","sym":"🔧","color":"#f04e23"},{"id":"096770","name":"SK이노베이션","mkt":"KR","return":-4.9,"cap":129837,"dd":-42.8,"desc":"정유와 배터리 자회사 SK온을 가진 회사","headline":"배터리 자회사 적자가 이어져 대규모 유상증자를 했다","sym":"⛽","color":"#ea002c"},{"id":"066570","name":"LG전자","mkt":"KR","return":19.3,"cap":141086,"dd":-40.8,"desc":"가전·TV와 자동차 전장 부품을 하는 회사","headline":"전장이 흑자로 돌아섰지만 가전 수요가 부진했다","sym":"📺","color":"#a50034"},{"id":"018260","name":"삼성에스디에스","mkt":"KR","return":43.6,"cap":87693,"dd":-21.4,"desc":"삼성그룹의 IT 서비스와 물류를 맡는 회사","headline":"물류 운임이 내리며 매출이 크게 줄었다","sym":"🖥️","color":"#1428a0"},{"id":"017670","name":"SK텔레콤","mkt":"KR","return":14.4,"cap":85283,"dd":-21.1,"desc":"국내 1위 이동통신사","headline":"AI 컴퍼니를 내세웠지만 통신 본업 성장은 정체됐다","sym":"📡","color":"#ea002c"},{"id":"015760","name":"한국전력","mkt":"KR","return":-3.4,"cap":119937,"dd":-21.2,"desc":"전력을 공급하는 공기업","headline":"누적 적자가 쌓여 요금 인상과 자구안을 반복했다","sym":"⚡","color":"#005bac"},{"id":"NVDA","name":"엔비디아","mkt":"US","return":236.6,"cap":4480516,"dd":-52.4,"desc":"AI 학습용 GPU를 사실상 독점 공급하는 회사","headline":"데이터센터 매출이 한 해 만에 세 배 넘게 뛰었다","sym":"🎮","color":"#76b900"},{"id":"MSFT","name":"마이크로소프트","mkt":"US","return":56.2,"cap":21946602,"dd":-27.8,"desc":"클라우드(애저)와 오피스를 파는 회사","headline":"오픈AI에 거액을 넣고 코파일럿을 전 제품에 붙였다","sym":"🪟","color":"#0078d4"},{"id":"META","name":"메타","mkt":"US","return":177.6,"cap":4035726,"dd":-63.2,"desc":"페이스북·인스타그램 광고로 버는 회사","headline":"'효율의 해'를 선언하고 대규모 감원, 광고 실적이 되살아났다","sym":"👥","color":"#1877f2"},{"id":"AAPL","name":"애플","mkt":"US","return":49.3,"cap":24450612,"dd":-30.9,"desc":"아이폰과 서비스로 버는 세계 최대 시가총액 기업","headline":"아이폰 판매는 정체됐고 AI 경쟁에서는 조용했다","sym":"🍎","color":"#6e6e73"},{"id":"GOOGL","name":"알파벳(구글)","mkt":"US","return":55.0,"cap":14195660,"dd":-39.8,"desc":"검색·유튜브와 클라우드를 하는 회사","headline":"바드로 급하게 맞섰고 연말에 제미나이를 공개했다","sym":"🔎","color":"#4285f4"},{"id":"AMZN","name":"아마존","mkt":"US","return":74.7,"cap":11263171,"dd":-49.6,"desc":"전자상거래와 클라우드(AWS) 1위 회사","headline":"비용을 줄여 이익을 되살리고 앤스로픽에 투자했다","sym":"📦","color":"#ff9900"},{"id":"TSLA","name":"테슬라","mkt":"US","return":129.8,"cap":4364243,"dd":-73.0,"desc":"전기차 제조사","headline":"가격을 계속 내려 판매량은 지켰지만 마진이 깎였다","sym":"⚡","color":"#cc0000"},{"id":"AMD","name":"AMD","mkt":"US","return":116.5,"cap":1313488,"dd":-57.4,"desc":"CPU와 GPU를 설계하는 회사","headline":"AI 가속기 MI300을 내놓으며 엔비디아에 도전장을 냈다","sym":"🖥️","color":"#ed1c24"},{"id":"AVGO","name":"브로드컴","mkt":"US","return":100.6,"cap":2791738,"dd":-14.9,"desc":"네트워크 칩과 인프라 소프트웨어를 파는 회사","headline":"맞춤형 AI 칩 수요가 늘었고 VM웨어 인수를 마무리했다","sym":"🔗","color":"#cc092f"},{"id":"SMCI","name":"슈퍼마이크로","mkt":"US","return":240.4,"cap":57673,"dd":-10.7,"desc":"AI 서버를 조립해 파는 회사","headline":"엔비디아 GPU 서버 수요를 그대로 받아 매출이 급증했다","sym":"🗄️","color":"#00539b"},{"id":"PLTR","name":"팔란티어","mkt":"US","return":159.5,"cap":174627,"dd":-65.5,"desc":"정부·기업용 데이터 분석 소프트웨어 회사","headline":"AI 플랫폼을 내놓고 처음으로 연간 흑자를 냈다","sym":"🔮","color":"#495057"},{"id":"CRM","name":"세일즈포스","mkt":"US","return":90.0,"cap":1637166,"dd":-47.2,"desc":"구독형 고객관리(CRM) 소프트웨어 회사","headline":"행동주의 압박에 비용을 줄여 이익률을 끌어올렸다","sym":"☁️","color":"#00a1e0"},{"id":"ORCL","name":"오라클","mkt":"US","return":26.2,"cap":2779656,"dd":-5.0,"desc":"기업용 데이터베이스와 클라우드 회사","headline":"AI 학습용 클라우드 수주가 늘었지만 하반기 성장은 둔화됐다","sym":"🗃️","color":"#c74634"},{"id":"ADBE","name":"어도비","mkt":"US","return":72.2,"cap":1948175,"dd":-40.3,"desc":"포토샵 등을 구독으로 파는 소프트웨어 회사","headline":"생성 AI 파이어플라이를 붙였고 피그마 인수는 규제에 막혔다","sym":"🎨","color":"#fa0f00"},{"id":"NOW","name":"서비스나우","mkt":"US","return":78.3,"cap":1003918,"dd":-38.8,"desc":"기업 업무 자동화 소프트웨어 회사","headline":"AI 기능을 상위 요금제로 묶어 팔기 시작했다","sym":"🧾","color":"#00c65e"},{"id":"INTC","name":"인텔","mkt":"US","return":83.0,"cap":1380083,"dd":-50.3,"desc":"PC·서버 CPU 회사이자 파운드리에 뛰어든 기업","headline":"적자 사업을 정리하며 파운드리에 회사의 명운을 걸었다","sym":"💻","color":"#0068b5"},{"id":"MU","name":"마이크론","mkt":"US","return":64.6,"cap":695534,"dd":-47.9,"desc":"D램·낸드를 만드는 메모리 회사","headline":"메모리 최악의 적자를 지나며 HBM 진입을 알렸다","sym":"💾","color":"#0088ce"},{"id":"QCOM","name":"퀄컴","mkt":"US","return":34.3,"cap":1405137,"dd":-42.0,"desc":"스마트폰 통신칩과 로열티로 버는 회사","headline":"스마트폰 수요 부진 속에 온디바이스 AI를 내세웠다","sym":"📶","color":"#3253dc"},{"id":"TXN","name":"텍사스인스트루먼트","mkt":"US","return":7.0,"cap":1690418,"dd":-12.7,"desc":"아날로그·임베디드 반도체 회사","headline":"산업·자동차 수요가 꺾이며 AI 랠리에서 비켜났다","sym":"🧮","color":"#cc0000"},{"id":"AMAT","name":"어플라이드머티어리얼즈","mkt":"US","return":61.1,"cap":996765,"dd":-41.5,"desc":"반도체 전공정 장비 1위 회사","headline":"메모리 투자는 줄었지만 중국 매출이 공백을 메웠다","sym":"🛠️","color":"#0f4c81"},{"id":"LRCX","name":"램리서치","mkt":"US","return":83.1,"cap":674421,"dd":-42.4,"desc":"반도체 식각·증착 장비를 만드는 회사","headline":"메모리 투자 축소로 매출은 줄었지만 회복 기대가 앞섰다","sym":"🪛","color":"#005596"},{"id":"KLAC","name":"KLA","mkt":"US","return":50.6,"cap":630675,"dd":-14.3,"desc":"반도체 검사·계측 장비를 만드는 회사","headline":"장비 사이클 저점을 지나며 실적이 줄었다","sym":"🔬","color":"#0076c0"},{"id":"ASML","name":"ASML","mkt":"US","return":31.7,"cap":2685122,"dd":-30.2,"desc":"EUV 노광 장비를 독점 공급하는 회사","headline":"수주는 쌓였지만 대중국 수출 규제가 강화됐다","sym":"🔭","color":"#0b5fa5"},{"id":"DELL","name":"델","mkt":"US","return":88.3,"cap":349757,"dd":-31.0,"desc":"PC와 서버를 파는 회사","headline":"PC는 부진했지만 AI 서버 수주가 새 성장축이 됐다","sym":"📟","color":"#007db8"},{"id":"HPQ","name":"HP","mkt":"US","return":15.6,"cap":292436,"dd":-32.1,"desc":"PC와 프린터를 파는 회사","headline":"PC 수요 부진이 1년 내내 이어졌다","sym":"🖨️","color":"#0096d6"},{"id":"IBM","name":"IBM","mkt":"US","return":19.8,"cap":1441885,"dd":-6.0,"desc":"소프트웨어와 컨설팅 중심의 IT 기업","headline":"왓슨X를 내놨지만 AI 수혜주로는 덜 인정받았다","sym":"💼","color":"#0f62fe"},{"id":"CSCO","name":"시스코","mkt":"US","return":8.6,"cap":2233738,"dd":-21.7,"desc":"네트워크 장비 1위 회사","headline":"주문이 밀리며 성장이 둔화됐고 스플렁크 인수를 발표했다","sym":"🌐","color":"#1ba0d7"},{"id":"NFLX","name":"넷플릭스","mkt":"US","return":58.8,"cap":1639490,"dd":-50.6,"desc":"구독형 스트리밍 1위 사업자","headline":"계정 공유 단속과 광고 요금제로 가입자가 다시 늘었다","sym":"🎬","color":"#e50914"},{"id":"DIS","name":"디즈니","mkt":"US","return":2.3,"cap":2005166,"dd":-43.7,"desc":"테마파크·영화와 스트리밍을 하는 회사","headline":"아이거가 돌아와 비용을 줄였지만 스트리밍 적자가 남았다","sym":"🏰","color":"#113ccf"},{"id":"UBER","name":"우버","mkt":"US","return":130.2,"cap":662779,"dd":-42.9,"desc":"차량 호출과 음식 배달 플랫폼","headline":"창사 이래 처음으로 연간 영업흑자를 냈다","sym":"🚕","color":"#276ef1"},{"id":"ABNB","name":"에어비앤비","mkt":"US","return":58.4,"cap":688001,"dd":-54.5,"desc":"숙박을 중개하는 플랫폼","headline":"여행 수요가 이어지며 흑자를 유지했다","sym":"🏠","color":"#ff5a5f"},{"id":"SHOP","name":"쇼피파이","mkt":"US","return":106.9,"cap":581269,"dd":-73.8,"desc":"소상공인용 온라인 쇼핑몰을 만들어주는 회사","headline":"물류 사업을 통째로 팔고 이익 중심으로 돌아섰다","sym":"🛍️","color":"#96bf48"},{"id":"PYPL","name":"페이팔","mkt":"US","return":-17.6,"cap":1031096,"dd":-61.7,"desc":"온라인 결제 회사","headline":"결제액은 늘었는데 수익성이 갈수록 깎였다","sym":"💰","color":"#003087"},{"id":"SNAP","name":"스냅","mkt":"US","return":82.4,"cap":182680,"dd":-81.0,"desc":"스냅챗을 운영하는 소셜 회사","headline":"광고 회복이 경쟁사보다 눈에 띄게 느렸다","sym":"👻","color":"#b8b400"},{"id":"PINS","name":"핀터레스트","mkt":"US","return":58.2,"cap":196038,"dd":-37.1,"desc":"이미지 기반 소셜 커머스 플랫폼","headline":"광고 상품을 손보며 매출이 다시 늘기 시작했다","sym":"📌","color":"#e60023"},{"id":"ROKU","name":"로쿠","mkt":"US","return":119.4,"cap":73205,"dd":-82.6,"desc":"스마트TV 운영체제와 광고 플랫폼 회사","headline":"TV 광고 시장이 회복된다는 기대로 반등했다","sym":"📺","color":"#6f1ab1"},{"id":"ZM","name":"줌","mkt":"US","return":3.7,"cap":254784,"dd":-63.8,"desc":"화상회의 소프트웨어 회사","headline":"코로나 특수가 완전히 끝나며 성장이 멈춰 섰다","sym":"📹","color":"#2d8cff"},{"id":"DOCU","name":"도큐사인","mkt":"US","return":0.5,"cap":146454,"dd":-63.9,"desc":"전자서명 소프트웨어 회사","headline":"전자서명 구독 성장 둔화가 이어졌다","sym":"✍️","color":"#ffcc22"},{"id":"CRWD","name":"크라우드스트라이크","mkt":"US","return":139.0,"cap":313207,"dd":-56.9,"desc":"클라우드 기반 보안 회사","headline":"보안 예산이 버텨준 덕에 흑자 전환에 성공했다","sym":"🦅","color":"#e01a2b"},{"id":"SNOW","name":"스노우플레이크","mkt":"US","return":39.6,"cap":565815,"dd":-59.2,"desc":"클라우드 데이터 웨어하우스 회사","headline":"고객들이 사용량을 줄이며 성장률이 떨어졌다","sym":"❄️","color":"#29b5e8"},{"id":"DDOG","name":"데이터독","mkt":"US","return":59.6,"cap":299154,"dd":-58.7,"desc":"클라우드 모니터링 소프트웨어 회사","headline":"고객 비용 절감 여파를 지나 성장률이 회복됐다","sym":"🐕","color":"#632ca6"},{"id":"NET","name":"클라우드플레어","mkt":"US","return":84.4,"cap":183450,"dd":-66.9,"desc":"CDN과 보안을 파는 인터넷 인프라 회사","headline":"AI 추론을 엣지에서 돌리는 서비스를 내놨다","sym":"🌩️","color":"#f38020"},{"id":"MDB","name":"몽고DB","mkt":"US","return":101.1,"cap":172834,"dd":-60.9,"desc":"문서형 데이터베이스를 파는 회사","headline":"AI 앱에 쓰이는 벡터 검색 기능으로 다시 평가받았다","sym":"🍃","color":"#00ed64"},{"id":"PANW","name":"팔로알토네트웍스","mkt":"US","return":108.7,"cap":542607,"dd":-34.0,"desc":"기업용 보안 장비와 소프트웨어 회사","headline":"구독 전환이 자리 잡으며 흑자 폭이 커졌다","sym":"🛡️","color":"#fa582d"},{"id":"ANET","name":"아리스타네트웍스","mkt":"US","return":91.5,"cap":477711,"dd":-15.3,"desc":"데이터센터용 네트워크 스위치를 만드는 회사","headline":"AI 데이터센터 구축 수요를 그대로 받아냈다","sym":"🔀","color":"#1b3f8b"},{"id":"COIN","name":"코인베이스","mkt":"US","return":366.9,"cap":101207,"dd":-86.6,"desc":"미국 최대 가상자산 거래소","headline":"SEC에 제소당했지만 비트코인이 반등하고 현물 ETF 기대가 커졌다","sym":"💱","color":"#0052ff"},{"id":"MSTR","name":"마이크로스트래티지","mkt":"US","return":372.5,"cap":25948,"dd":-74.0,"desc":"비트코인을 대량 보유한 소프트웨어 회사","headline":"보유한 비트코인 가격이 크게 반등했다","sym":"📊","color":"#dd1f26"},{"id":"RIVN","name":"리비안","mkt":"US","return":21.7,"cap":210906,"dd":-83.1,"desc":"전기 픽업과 밴을 만드는 신생 완성차","headline":"생산량은 늘렸지만 대당 적자가 계속됐다","sym":"🛻","color":"#2e5e4e"},{"id":"LCID","name":"루시드","mkt":"US","return":-32.7,"cap":179397,"dd":-86.4,"desc":"고급 전기 세단을 만드는 신생 완성차","headline":"판매가 목표에 못 미쳐 계속 증자에 기댔다","sym":"🚘","color":"#2e3192"},{"id":"F","name":"포드","mkt":"US","return":15.0,"cap":451901,"dd":-52.1,"desc":"미국 2위 완성차 회사","headline":"전기차 투자 속도를 늦췄고 전미자동차노조 파업을 겪었다","sym":"🛞","color":"#003478"},{"id":"GM","name":"제너럴모터스","mkt":"US","return":7.7,"cap":570173,"dd":-48.3,"desc":"미국 최대 완성차 회사","headline":"노조 파업을 타결한 뒤 대규모 자사주 매입으로 방어했다","sym":"🏁","color":"#0170ce"},{"id":"BA","name":"보잉","mkt":"US","return":28.8,"cap":1501222,"dd":-13.5,"desc":"민항기와 방산을 함께 하는 제조사","headline":"인도량이 회복되며 현금흐름이 개선됐다","sym":"🛫","color":"#0033a1"},{"id":"DAL","name":"델타항공","mkt":"US","return":24.7,"cap":257228,"dd":-27.1,"desc":"미국 대형 항공사","headline":"여행 수요가 완전히 돌아오며 사상 최대 실적을 냈다","sym":"🛩️","color":"#c8102e"},{"id":"LUV","name":"사우스웨스트항공","mkt":"US","return":-10.2,"cap":227642,"dd":-32.6,"desc":"미국 대표 저비용 항공사","headline":"연말연시 대규모 결항 사태의 후유증이 오래 갔다","sym":"✈️","color":"#304cb2"},{"id":"CCL","name":"카니발","mkt":"US","return":116.9,"cap":130108,"dd":-65.8,"desc":"세계 최대 크루즈 회사","headline":"예약이 사상 최대를 기록하며 부채 우려가 걷혔다","sym":"🛳️","color":"#0066b2"},{"id":"MAR","name":"메리어트","mkt":"US","return":51.7,"cap":539814,"dd":-21.9,"desc":"호텔 브랜드를 운영하고 위탁 관리하는 회사","headline":"객실 단가가 오르며 실적 신기록을 썼다","sym":"🛏️","color":"#a0261a"},{"id":"WMT","name":"월마트","mkt":"US","return":12.6,"cap":4703567,"dd":-9.1,"desc":"세계 최대 오프라인 소매 체인","headline":"고물가 속에 식료품 점유율을 오히려 늘렸다","sym":"🛒","color":"#0071ce"},{"id":"COST","name":"코스트코","mkt":"US","return":47.9,"cap":2439515,"dd":-25.1,"desc":"회원제 창고형 할인점","headline":"회원 갱신률이 유지되며 방어주 역할을 했다","sym":"🏪","color":"#e31837"},{"id":"TGT","name":"타깃","mkt":"US","return":-2.6,"cap":780038,"dd":-38.1,"desc":"중산층을 겨냥한 할인점 체인","headline":"재고 과잉과 소비 위축으로 실적이 꺾였다","sym":"🎯","color":"#cc0000"},{"id":"HD","name":"홈디포","mkt":"US","return":12.3,"cap":3665509,"dd":-21.6,"desc":"주택 개보수 자재 1위 소매 체인","headline":"고금리로 주택 거래가 얼어붙어 매출이 줄었다","sym":"🔨","color":"#f96302"},{"id":"MCD","name":"맥도날드","mkt":"US","return":14.9,"cap":2254480,"dd":-4.5,"desc":"세계 최대 햄버거 프랜차이즈","headline":"가격을 올려 매출을 지켰다","sym":"🍔","color":"#c8102e"},{"id":"SBUX","name":"스타벅스","mkt":"US","return":-5.2,"cap":1340117,"dd":-11.5,"desc":"세계 최대 커피 체인","headline":"중국 회복이 더뎠고 미국에선 노조 이슈가 이어졌다","sym":"☕","color":"#00704a"},{"id":"NKE","name":"나이키","mkt":"US","return":-9.1,"cap":2143068,"dd":-27.9,"desc":"스포츠 용품 1위 브랜드","headline":"중국 회복이 더디고 재고 정리가 길어졌다","sym":"👟","color":"#4a4a4a"},{"id":"KO","name":"코카콜라","mkt":"US","return":-2.0,"cap":3117203,"dd":-2.9,"desc":"세계 최대 음료 회사","headline":"가격을 올려 매출은 지켰지만 판매 수량은 줄었다","sym":"🥤","color":"#f40009"},{"id":"PEP","name":"펩시코","mkt":"US","return":-0.9,"cap":2782929,"dd":-3.5,"desc":"음료와 스낵을 함께 파는 회사","headline":"가격 인상 효과는 컸지만 비만약 확산 우려가 붙었다","sym":"🥨","color":"#004b93"},{"id":"PG","name":"프록터앤드갬블","mkt":"US","return":0.6,"cap":4114371,"dd":-6.0,"desc":"세제·기저귀 등 생활용품 1위 회사","headline":"가격을 올려 마진은 지켰지만 판매 수량은 줄었다","sym":"🧼","color":"#003da5"},{"id":"JNJ","name":"존슨앤드존슨","mkt":"US","return":-7.5,"cap":4895555,"dd":-2.3,"desc":"제약과 의료기기를 하는 헬스케어 대기업","headline":"소비재 부문 켄뷰를 떼어내 따로 상장시켰다","sym":"🩹","color":"#c8102e"},{"id":"PFE","name":"화이자","mkt":"US","return":-39.4,"cap":2938465,"dd":-6.6,"desc":"세계 최대 제약사","headline":"코로나 백신·치료제 매출이 급격히 줄었다","sym":"💊","color":"#0093d0"},{"id":"MRNA","name":"모더나","mkt":"US","return":-37.1,"cap":866724,"dd":-23.9,"desc":"mRNA 백신을 만드는 바이오텍","headline":"코로나 백신 수요가 사라지며 적자로 돌아섰다","sym":"💉","color":"#e0195a"},{"id":"LLY","name":"일라이릴리","mkt":"US","return":63.9,"cap":4276445,"dd":-2.6,"desc":"당뇨·비만 치료제를 만드는 제약사","headline":"비만 치료제 젭바운드가 승인됐다","sym":"🧪","color":"#d52b1e"},{"id":"UNH","name":"유나이티드헬스","mkt":"US","return":5.6,"cap":5698817,"dd":-6.3,"desc":"미국 최대 민간 건강보험사","headline":"의료 이용량이 늘며 손해율 상승 우려가 커졌다","sym":"🏥","color":"#002677"},{"id":"XOM","name":"엑슨모빌","mkt":"US","return":-0.6,"cap":4786952,"dd":-6.7,"desc":"세계 최대 석유 회사","headline":"유가가 내려 전년의 사상 최대 이익에서 후퇴, 파이오니어 인수 발표","sym":"🛢️","color":"#ee1c25"},{"id":"CVX","name":"셰브론","mkt":"US","return":-10.7,"cap":3577472,"dd":-6.8,"desc":"미국 2위 석유 회사","headline":"유가와 정제 마진이 함께 내렸고 헤스 인수를 발표했다","sym":"⛽","color":"#0054a4"},{"id":"OXY","name":"옥시덴탈","mkt":"US","return":-0.5,"cap":646602,"dd":-19.5,"desc":"석유·가스 회사. 버크셔가 계속 사들이는 종목","headline":"버크셔가 지분을 계속 늘렸지만 유가가 받쳐주지 않았다","sym":"⚗️","color":"#c8102e"},{"id":"FCX","name":"프리포트맥모란","mkt":"US","return":12.6,"cap":657194,"dd":-25.9,"desc":"구리·금 광산 회사","headline":"전력망 수요 기대와 중국 경기 부진이 맞섰다","sym":"⛏️","color":"#005eb8"},{"id":"NEM","name":"뉴몬트","mkt":"US","return":-14.1,"cap":464981,"dd":-40.0,"desc":"세계 최대 금광 회사","headline":"금값은 올랐는데 생산 비용이 더 크게 올랐다","sym":"🥇","color":"#c9a227"},{"id":"CAT","name":"캐터필러","mkt":"US","return":25.0,"cap":1458503,"dd":-1.8,"desc":"건설·광산 장비 1위 회사","headline":"인프라 투자 덕에 장비 수요가 유지됐다","sym":"🚜","color":"#c8a000"},{"id":"DE","name":"디어","mkt":"US","return":-4.2,"cap":1479978,"dd":-4.5,"desc":"농기계 1위 회사","headline":"곡물가가 내리며 농가의 투자 심리가 꺾였다","sym":"🌾","color":"#367c2b"},{"id":"JPM","name":"JP모건","mkt":"US","return":31.1,"cap":4566736,"dd":-17.7,"desc":"미국 최대 은행","headline":"지역은행 위기 때 퍼스트리퍼블릭을 떠안으며 몸집을 키웠다","sym":"💵","color":"#005eb8"},{"id":"BAC","name":"뱅크오브아메리카","mkt":"US","return":4.3,"cap":3092250,"dd":-30.6,"desc":"미국 최대 소매은행","headline":"보유 채권의 평가손실이 1년 내내 발목을 잡았다","sym":"🏦","color":"#e31837"},{"id":"GS","name":"골드만삭스","mkt":"US","return":15.7,"cap":1331458,"dd":-12.8,"desc":"대형 투자은행","headline":"소비자금융 진출을 접었고 IB 수수료 부진이 이어졌다","sym":"🏆","color":"#7399c6"},{"id":"V","name":"비자","mkt":"US","return":25.8,"cap":5323498,"dd":-11.2,"desc":"카드 결제망 1위 회사","headline":"소비가 버텨주며 결제액이 꾸준히 늘었다","sym":"💳","color":"#1a1f71"},{"id":"MA","name":"마스터카드","mkt":"US","return":22.4,"cap":4057622,"dd":-12.2,"desc":"2위 카드 결제망 회사","headline":"해외 여행 결제 회복이 이어졌다","sym":"🔶","color":"#eb001b"},{"id":"BRK-B","name":"버크셔해서웨이","mkt":"US","return":17.0,"cap":8596384,"dd":-13.8,"desc":"버핏이 이끄는 보험·제조 지주회사","headline":"보험 인수 실적이 좋았고 현금은 사상 최대로 쌓였다","sym":"🎩","color":"#1f3864"}],"stdev":81.7}]};
+/*DATA_END*/
+</script>
+
+<script>
+/* ── 순위표 백엔드 ───────────────────────────────────────────────
+   지금은 브라우저 localStorage에 저장한다(그 PC 안에서만 공유).
+   웹에 올린 뒤 API_BASE에 엔드포인트 주소를 넣으면 서버 순위표로 바뀐다.
+     GET  {API_BASE}?stage=<stageId>&diff=<easy|normal|hard>  → [{ nick, streak, at }, ...]
+     POST {API_BASE}  body: { stage, diff, nick, streak, at }
+   ──────────────────────────────────────────────────────────── */
+const API_BASE = null;
+
+const LS_NICK = "hl.nick";
+const LS_DIFF = "hl.diff";
+const boardKey = (id, d) => "hl.board." + id + "." + d;
+const bestKey = (id, d) => "hl.best." + id + "." + d;
+
+// 저장소가 막힌 환경(시크릿 모드 등)에서도 게임은 돌아가야 한다
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+};
+
+const board = {
+  async load(stageId, diffId) {
+    if (API_BASE) {
+      const res = await fetch(
+        `${API_BASE}?stage=${encodeURIComponent(stageId)}&diff=${encodeURIComponent(diffId)}`);
+      return res.json();
+    }
+    try { return JSON.parse(store.get(boardKey(stageId, diffId))) || []; } catch { return []; }
+  },
+  async submit(stageId, diffId, entry) {
+    if (API_BASE) {
+      await fetch(API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: stageId, diff: diffId, ...entry })
+      });
+      return this.load(stageId, diffId);
+    }
+    const all = [...(await this.load(stageId, diffId)), entry];
+    store.set(boardKey(stageId, diffId), JSON.stringify(all));
+    return all;
+  }
+};
+
+const FLAG = { KR: "🇰🇷", US: "🇺🇸" };
+const $ = id => document.getElementById(id);
+let stage, cards, state, nick = "", diff = "normal";
+
+/* ── 난이도 ──
+   각 칸은 [연승 상한, 최소 순위 거리, 최대 순위 거리]. 거리는 덱 크기 비율이다.
+   하한만 두면 밴드가 무력해진다 — 최소 거리를 줄여도 먼 카드가 후보에 그대로
+   남아 실제 추첨이 거의 안 변하기 때문이다. 그래서 상한을 같이 두고 창으로 잡는다. */
+const DIFFS = {
+  easy:   { label: "쉬움",   bands: [[4, .35, .80], [9, .32, .70], [15, .22, .50], [Infinity, .14, .32]] },
+  normal: { label: "보통",   bands: [[4, .24, .65], [9, .20, .50], [15, .12, .28], [Infinity, .06, .16]] },
+  hard:   { label: "어려움", bands: [[4, .16, .42], [9, .12, .32], [15, .06, .18], [Infinity, .025, .08]] }
+};
+
+/* ── 카드 추첨 ──
+   스테이지마다 수익률 산포가 전혀 다르고(코로나는 게임스탑 +4,679% 같은 이상치까지
+   있어) %p 격차나 표준편차로 밴드를 잡으면 스테이지별로 난이도가 널뛴다.
+   그래서 수익률 '순위 거리'로 잡는다. 덱 크기에 비례하므로 스케일에 안 흔들린다. */
+function pick(current, used, streak) {
+  const pool = cards.filter(c => !used.has(c.id));
+  const [, loFrac, hiFrac] = DIFFS[diff].bands.find(b => streak < b[0]);
+  const lo = Math.max(1, Math.round(cards.length * loFrac));
+  const hi = Math.max(lo, Math.round(cards.length * hiFrac));
+  // 창을 벗어난 정도가 가장 작은 카드들 중에서 뽑는다. 창 안에 카드가 있으면
+  // 전부 벗어난 정도 0이라 그중 무작위가 되고, 창이 덱 구조상 불가능하면
+  // (예: 덱 한가운데 카드는 55% 이상 떨어진 상대가 없다) 가장 가까운 쪽으로 물러난다.
+  const miss = c => {
+    const d = Math.abs(c.rank - current.rank);
+    return d < lo ? lo - d : d > hi ? d - hi : 0;
+  };
+  const best = Math.min(...pool.map(miss));
+  const cand = pool.filter(c => miss(c) === best);
+  return cand[Math.floor(Math.random() * cand.length)];
+}
+
+function fmt(v) { return (v >= 0 ? "+" : "") + v.toFixed(1) + "%"; }
+function ymd(s) { return s.replace(/-/g, "."); }
+
+// 미국 종목은 이름 옆에 티커를 덧붙인다. 이름이 곧 티커면(IBM 등) 생략
+function tk(c) {
+  return c.mkt === "US" && c.name !== c.id ? `<span class="tk">(${c.id})</span>` : "";
+}
+
+// 억원 단위를 읽기 쉬운 표기로. 1조 이상은 조 단위, 미만은 억 단위
+function capText(억원) {
+  if (!억원) return null;
+  if (억원 >= 1000000) return Math.round(억원 / 10000).toLocaleString() + "조원";
+  if (억원 >= 10000) return (억원 / 10000).toFixed(1) + "조원";
+  return Math.round(억원).toLocaleString() + "억원";
+}
+
+function paintCard(which, card) {
+  $(which + "Name").innerHTML = `<span class="flag">${FLAG[card.mkt]}</span>${card.name}${tk(card)}`;
+  $(which + "Wm").textContent = card.sym || "";
+  $(which + "Desc").textContent = card.desc || "";
+  $(which + "Desc").style.display = card.desc ? "" : "none";
+  const cap = capText(card.cap);
+  $(which + "Stats").innerHTML =
+    (cap ? `<span class="stat"><span class="k">시작 시점 시총</span><b>${cap}</b></span>` : "") +
+    (card.dd != null ? `<span class="stat"><span class="k">직전 고점 대비</span><b>${card.dd.toFixed(1)}%</b></span>` : "");
+  $(which + "Headline").textContent = card.headline || "";
+  $(which + "Headline").style.display = card.headline ? "" : "none";
+  $(which + "Card").style.background =
+    `radial-gradient(circle at 50% 45%, ${card.color || "#3a4657"}44, var(--bg) 70%)`;
+}
+
+function paintValue(el, v) {
+  el.textContent = fmt(v);
+  el.className = "value " + (v >= 0 ? "up" : "down");
+}
+
+function countUp(el, target) {
+  const t0 = performance.now(), dur = 600;
+  el.className = "value " + (target >= 0 ? "up" : "down");
+  (function step(t) {
+    const p = Math.min((t - t0) / dur, 1);
+    el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(step);
+  })(performance.now());
+}
+
+function show(screen) {
+  for (const id of ["intro", "select", "game", "result"])
+    $(id).style.display = id === screen ? (id === "game" ? "" : "block") : "none";
+}
+
+/* ── 스테이지 선택 화면 ── */
+function renderSelect() {
+  show("select");
+  $("hdTitle").textContent = "그때 샀더라면";
+  $("hdPeriod").textContent = "스테이지 선택";
+  $("streak").textContent = "0";
+  $("dlist").innerHTML = Object.entries(DIFFS).map(([id, d]) =>
+    `<button class="dbtn${id === diff ? " on" : ""}" data-diff="${id}">${d.label}</button>`).join("");
+  for (const el of document.querySelectorAll(".dbtn"))
+    el.onclick = () => { diff = el.dataset.diff; store.set(LS_DIFF, diff); renderSelect(); };
+  $("slist").innerHTML = DATA.stages.map(s => {
+    const kr = s.cards.filter(c => c.mkt === "KR").length;
+    const best = Number(store.get(bestKey(s.id, diff)) || 0);
+    return `<div class="scard" data-id="${s.id}">
+      <span class="st">${s.title}</span>
+      <span class="sw">${ymd(s.window.start)} → ${ymd(s.window.end)}</span>
+      <span class="sc">${s.context}</span>
+      <span class="sm">
+        <span class="stat"><span class="k">종목</span><b>${s.cards.length}</b></span>
+        <span class="stat"><span class="k">🇰🇷 / 🇺🇸</span><b>${kr} / ${s.cards.length - kr}</b></span>
+        ${best ? `<span class="stat best">🔥 최고 ${best}연승</span>` : ""}
+      </span>
+    </div>`;
+  }).join("");
+  for (const el of document.querySelectorAll(".scard"))
+    el.onclick = () => startStage(el.dataset.id);
+}
+
+function startStage(id) {
+  stage = DATA.stages.find(s => s.id === id);
+  cards = stage.cards;
+  [...cards].sort((a, b) => a.return - b.return).forEach((c, i) => c.rank = i);
+  $("hdTitle").textContent = `${stage.title} · ${stage.context}`;
+  $("hdPeriod").textContent = `${ymd(stage.window.start)} → ${ymd(stage.window.end)}`;
+  $("nextLabel").textContent = `이 종목의 ${ymd(stage.window.start)} → ${ymd(stage.window.end)} 수익률은?`;
+  start();
+}
+
+function start() {
+  const first = cards[Math.floor(Math.random() * cards.length)];
+  state = { current: first, next: null, used: new Set([first.id]), streak: 0, history: [first] };
+  show("game");
+  $("streak").textContent = "0";
+  paintCard("cur", first);
+  paintValue($("curValue"), first.return);
+  deal();
+}
+
+function deal() {
+  const n = pick(state.current, state.used, state.streak);
+  state.next = n;
+  state.used.add(n.id);
+  paintCard("next", n);
+  $("nextValue").textContent = "?";
+  $("nextValue").className = "value";
+  $("mark").textContent = "";
+  setEnabled(true);
+}
+
+function setEnabled(on) { $("btnUp").disabled = !on; $("btnDown").disabled = !on; }
+
+function answer(higher) {
+  setEnabled(false);
+  const correct = (state.next.return > state.current.return) === higher;
+  countUp($("nextValue"), state.next.return);
+  setTimeout(() => {
+    $("mark").textContent = correct ? "✓" : "✗";
+    state.history.push({ ...state.next, correct });
+    if (!correct) return setTimeout(end, 900);
+    state.streak++;
+    $("streak").textContent = state.streak;
+    setTimeout(() => {
+      state.current = state.next;
+      paintCard("cur", state.current);
+      paintValue($("curValue"), state.current.return);
+      if (state.used.size >= cards.length) return end();
+      deal();
+    }, 600);
+  }, 600);
+}
+
+async function end() {
+  show("result");
+  $("finalStreak").textContent = state.streak;
+  $("finalStage").textContent = `${stage.title} · ${DIFFS[diff].label}`;
+  $("finalWindow").textContent = `${ymd(stage.window.start)} → ${ymd(stage.window.end)}`;
+  $("shareImg").style.display = "none";
+  $("btnShare").textContent = "이미지로 공유";
+  if (state.streak > Number(store.get(bestKey(stage.id, diff)) || 0))
+    store.set(bestKey(stage.id, diff), String(state.streak));
+
+  $("rows").innerHTML = state.history.map((c, i) => `
+    <div class="row">
+      <span class="n">${i + 1}</span>
+      <span class="sym">${c.sym || ""}</span>
+      <span style="flex:1;text-align:left">${FLAG[c.mkt]} ${c.name}${tk(c)}
+        ${c.headline ? `<span class="note">${c.headline}</span>` : ""}</span>
+      <span class="r" style="color:${c.return >= 0 ? "var(--up)" : "var(--down)"}">${fmt(c.return)}</span>
+      <span class="${c.correct ? "ok" : "no"}">${c.correct === undefined ? "" : c.correct ? "✓" : "✗"}</span>
+    </div>`).join("");
+
+  const entry = { nick, streak: state.streak, at: Date.now() };
+  $("board").innerHTML = `<div class="brow"><span class="who">기록 올리는 중…</span></div>`;
+  let all;
+  try { all = await board.submit(stage.id, diff, entry); }
+  catch { $("board").innerHTML = `<div class="brow"><span class="who">순위표를 불러오지 못했습니다</span></div>`; return; }
+  renderBoard(all, entry);
+}
+
+function renderBoard(all, mine) {
+  const sorted = [...all].sort((a, b) => b.streak - a.streak || a.at - b.at);
+  const myRank = sorted.findIndex(e => e.at === mine.at && e.nick === mine.nick) + 1;
+  $("boardTitle").textContent =
+    `${stage.title} · ${DIFFS[diff].label} 순위표 · 총 ${sorted.length}판 중 ${myRank}위`;
+  const top = sorted.slice(0, 10);
+  if (myRank > 10) top.push(sorted[myRank - 1]);
+  $("board").innerHTML = top.map(e => {
+    const rank = sorted.indexOf(e) + 1;
+    const me = e.at === mine.at && e.nick === mine.nick;
+    const d = new Date(e.at);
+    const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return `<div class="brow ${me ? "me" : ""}">
+      <span class="rank">${rank}</span>
+      <span class="who">${esc(e.nick)}</span>
+      <span class="when">${when}</span>
+      <span class="sc">${e.streak}연승</span>
+    </div>`;
+  }).join("");
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function begin() {
+  const v = $("nickInput").value.trim();
+  if (!v) { $("nickInput").focus(); return; }
+  nick = v.slice(0, 12);
+  store.set(LS_NICK, nick);
+  $("hudNick").textContent = nick;
+  renderSelect();
+}
+
+$("btnStart").onclick = begin;
+$("nickInput").onkeydown = e => { if (e.key === "Enter") begin(); };
+$("btnUp").onclick = () => answer(true);
+$("btnDown").onclick = () => answer(false);
+/* ── 결과 공유 ──
+   결과 카드를 캔버스에 그려 PNG로 만든다. 그리드는 시작 카드를 뺀 나머지
+   (=실제로 승부한 판)를 끊어 보여준다. 판이 20개를 넘으면 한 줄에 10칸씩 넣는다 —
+   5칸씩 쌓으면 세로로 길어져 카톡 대화방에서 위아래가 잘린다.
+   공유 시트(파일 첨부) → 클립보드 → 화면에 이미지 펼치기 순으로 물러난다. */
+const SHARE_W = 1080, SHARE_PAD = 80;
+const SHARE_FONT = 'system-ui,-apple-system,"Malgun Gothic",sans-serif';
+let shareUrl = null;
+
+function shareText() {
+  const last = state.history.slice(-2);
+  const name = c => `${FLAG[c.mkt]} ${c.name}`;
+  return [
+    `그때 샀더라면 — ${stage.title} · ${DIFFS[diff].label}`,
+    `🔥 ${state.streak}연승`,
+    last.length === 2 ? `마지막 승부: ${name(last[0])} vs ${name(last[1])}` : ""
+  ].join("\n").trim();
+}
+
+function rrect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+// 폭을 넘기면 글자 크기를 줄인다. 닉네임·종목명 길이를 미리 알 수 없어서다.
+function fitFont(g, text, weight, size, max) {
+  do { g.font = `${weight} ${size}px ${SHARE_FONT}`; size -= 2; }
+  while (size > 14 && g.measureText(text).width > max);
+}
+
+function drawShareCard() {
+  const marks = state.history.slice(1).map(c => c.correct);
+  const wide = marks.length > 20;
+  const perRow = wide ? 10 : 5, cell = wide ? 80 : 92, cellGap = wide ? 12 : 16;
+  const rows = Math.ceil(marks.length / perRow);
+  const gridH = rows ? rows * cell + (rows - 1) * cellGap : 0;
+  const last = state.history.slice(-2);
+  const hasLast = last.length === 2;
+
+  const gridTop = 500;
+  let y = gridTop + gridH;
+  const lastTop = y + 60;
+  if (hasLast) y = lastTop + 150;
+  const footTop = y + 70;
+  const H = footTop + 110;
+
+  const cv = document.createElement("canvas");
+  cv.width = SHARE_W; cv.height = H;
+  const g = cv.getContext("2d");
+  const mid = SHARE_W / 2, inner = SHARE_W - SHARE_PAD * 2;
+
+  g.fillStyle = "#0e1116"; g.fillRect(0, 0, SHARE_W, H);
+  g.fillStyle = "#f5c451"; g.fillRect(0, 0, SHARE_W, 10);
+
+  g.textAlign = "center"; g.textBaseline = "alphabetic";
+  g.fillStyle = "#f5c451";
+  g.font = `800 44px ${SHARE_FONT}`;
+  g.fillText("그때 샀더라면", mid, 120);
+
+  g.fillStyle = "#e8ecf1";
+  fitFont(g, `${stage.title} · ${DIFFS[diff].label}`, 700, 40, inner);
+  g.fillText(`${stage.title} · ${DIFFS[diff].label}`, mid, 186);
+
+  // 어느 국면인지가 핵심 정보다. 축소된 채팅방 썸네일에서도 읽히게 키워 둔다
+  g.fillStyle = "#c3cad4";
+  g.font = `700 38px ${SHARE_FONT}`;
+  g.fillText(`${ymd(stage.window.start)} → ${ymd(stage.window.end)}`, mid, 238);
+
+  // 연승 수와 단위를 한 덩어리로 가운데 맞춘다
+  const num = String(state.streak);
+  g.textAlign = "left";
+  g.font = `800 170px ${SHARE_FONT}`;
+  const nw = g.measureText(num).width;
+  g.font = `700 54px ${SHARE_FONT}`;
+  const uw = g.measureText("연승").width;
+  const x0 = mid - (nw + 14 + uw) / 2;
+  g.fillStyle = "#f5c451";
+  g.font = `800 170px ${SHARE_FONT}`;
+  g.fillText(num, x0, 410);
+  g.font = `700 54px ${SHARE_FONT}`;
+  g.fillText("연승", x0 + nw + 14, 410);
+
+  marks.forEach((ok, i) => {
+    const r = Math.floor(i / perRow), c = i % perRow;
+    const n = Math.min(perRow, marks.length - r * perRow);
+    const rowW = n * cell + (n - 1) * cellGap;
+    g.fillStyle = ok ? "#22c55e" : "#ef4444";
+    rrect(g, mid - rowW / 2 + c * (cell + cellGap), gridTop + r * (cell + cellGap), cell, cell, cell / 4.6);
+    g.fill();
+  });
+
+  if (hasLast) {
+    g.fillStyle = "#171b22";
+    rrect(g, SHARE_PAD, lastTop, inner, 130, 24);
+    g.fill();
+    g.strokeStyle = "#262c36"; g.lineWidth = 2; g.stroke();
+    g.textAlign = "center";
+    g.fillStyle = "#8b95a3";
+    g.font = `400 26px ${SHARE_FONT}`;
+    g.fillText("마지막 승부", mid, lastTop + 48);
+    const line = `${last[0].name}  vs  ${last[1].name}`;
+    g.fillStyle = "#e8ecf1";
+    fitFont(g, line, 700, 40, inner - 60);
+    g.fillText(line, mid, lastTop + 100);
+  }
+
+  g.textAlign = "center";
+  g.fillStyle = "#e8ecf1";
+  fitFont(g, nick, 700, 32, inner);
+  g.fillText(nick, mid, footTop);
+  g.fillStyle = "#8b95a3";
+  g.font = `400 24px ${SHARE_FONT}`;
+  g.fillText("실제 수익률(배당 재투자 총수익률) · 투자 권유가 아닙니다", mid, footTop + 44);
+
+  return cv;
+}
+
+// 상태: "공유함" | "이미지 복사됨" | "펼침" | "실패" | null(사용자가 공유 시트를 닫음)
+async function shareImage() {
+  const png = new Promise(r => drawShareCard().toBlob(r, "image/png"));
+
+  // 모바일은 공유 시트가 자연스럽다(목록에 카톡이 뜬다). 데스크톱 공유 시트에는
+  // 카톡이 없어서 붙여넣기가 목적이 되므로, 클립보드를 먼저 시도한다.
+  const mobile = matchMedia("(pointer: coarse)").matches;
+  if (mobile) {
+    const r = await shareSheet(await png);
+    if (r) return r;
+  }
+
+  // ClipboardItem에는 Blob 대신 약속을 그대로 넘긴다. await로 사용자 제스처가
+  // 끊긴 뒤에 쓰면 사파리가 거부한다. 클립보드 자체가 보안 컨텍스트 전용이라
+  // file://로 열면 여기서 실패한다 — http://localhost나 https로 열어야 한다.
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    return { status: "이미지 복사됨", blob: await png };
+  } catch {}
+
+  if (!mobile) {
+    const r = await shareSheet(await png);
+    if (r) return r;
+  }
+  const blob = await png;
+  return blob ? { status: "펼침", blob } : { status: "실패" };
+}
+
+// 공유 시트를 쓸 수 없으면 null을 돌려 다음 수단으로 넘긴다
+async function shareSheet(blob) {
+  if (!blob) return { status: "실패" };
+  const file = new File([blob], "그때샀더라면.png", { type: "image/png" });
+  if (!navigator.canShare || !navigator.canShare({ files: [file] })) return null;
+  try { await navigator.share({ files: [file], text: shareText() }); return { status: "공유함" }; }
+  catch (e) { return e && e.name === "AbortError" ? { status: null } : null; }
+}
+
+function showShareImage(blob) {
+  const img = $("shareImg");
+  if (shareUrl) URL.revokeObjectURL(shareUrl);
+  shareUrl = URL.createObjectURL(blob);
+  img.src = shareUrl;
+  img.style.display = "block";
+}
+
+$("btnShare").onclick = async () => {
+  const btn = $("btnShare");
+  btn.disabled = true;
+  btn.textContent = "이미지 만드는 중…";
+  let r;
+  try { r = await shareImage(); } catch { r = { status: "실패" }; }
+  btn.disabled = false;
+  if (r.status === null) { btn.textContent = "이미지로 공유"; return; }
+  if (r.blob) showShareImage(r.blob);   // 저장하거나 붙여넣기 전에 눈으로 확인하게 한다
+  // 어느 공유 경로도 막힌 환경. 이미지를 펼쳐 직접 가져가게 한다
+  btn.textContent = r.status !== "펼침" ? r.status
+    : matchMedia("(pointer: coarse)").matches ? "길게 눌러 저장하세요" : "우클릭 → 이미지 복사";
+  setTimeout(() => { btn.textContent = "이미지로 공유"; }, 2500);
+};
+
+$("btnRetry").onclick = start;
+$("btnOther").onclick = renderSelect;
+
+$("introTotal").textContent = DATA.stages.reduce((n, s) => n + s.cards.length, 0);
+nick = store.get(LS_NICK) || "";
+if (DIFFS[store.get(LS_DIFF)]) diff = store.get(LS_DIFF);
+$("nickInput").value = nick;
+$("hudNick").textContent = nick;
+$("nickInput").focus();
+</script>
+</body>
+</html>
