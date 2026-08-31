@@ -91,9 +91,9 @@
   .dhint { font-size:12px; color:var(--dim); line-height:1.5; margin:0 0 18px; }
   /* 만들어진 결과 카드 미리보기. 공유가 막힌 환경에선 여기서 직접 저장한다 */
   #shareImg { display:none; width:min(340px,90vw); border:1px solid var(--line);
-              border-radius:12px; }
+              border-radius:12px; margin-top:22px; }
   /* 미리보기 이미지와 안내 문구는 버튼 줄과 달리 세로로 쌓는다 */
-  .shareOut { display:flex; flex-direction:column; align-items:center; margin-top:22px; }
+  .shareOut { display:flex; flex-direction:column; align-items:center; }
   #shareHint { display:none; width:min(340px,90vw); margin-top:8px; font-size:13px;
                color:var(--dim); line-height:1.6; text-align:center; }
   #shareHint b { color:var(--txt); }
@@ -220,8 +220,6 @@
   <div class="sub" id="finalWindow">—</div>
   <h2 id="boardTitle">순위표</h2>
   <div id="board"></div>
-  <h2>지나온 카드</h2>
-  <div id="rows"></div>
   <div class="actions">
     <button id="btnShare">이미지로 공유</button>
     <button id="btnRetry">같은 스테이지 다시</button>
@@ -231,6 +229,8 @@
     <img id="shareImg" alt="결과 카드 이미지">
     <p id="shareHint"></p>
   </div>
+  <h2>지나온 카드</h2>
+  <div id="rows"></div>
 </section>
 
 <div class="foot">
