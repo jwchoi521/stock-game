@@ -31,11 +31,19 @@
   .hud { text-align:right; white-space:nowrap; }
   .hud .nick { display:block; font-size:12px; color:var(--dim); }
   .streak { font-weight:700; font-size:15px; }
-  main { flex:1; display:flex; flex-direction:column; }
+  main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
   .card { position:relative; overflow:hidden; flex:1; display:flex; flex-direction:column;
           align-items:center; justify-content:center; gap:10px; padding:24px 16px; text-align:center;
-          transition:background .35s; }
+          transition:background .35s, transform .45s cubic-bezier(.4,0,.2,1), opacity .45s; }
   .card + .card { border-top:1px solid var(--line); }
+  /* 정답 후 다음 카드가 기준 카드 자리로 옮겨가는 전환. 두 카드가 flex:1로 크기가
+     같아 -100%면 정확히 앞 카드 자리에 안착한다. 세로 배치(모바일)는 위로 밀고,
+     가로 배치(760px~)는 아래 미디어쿼리에서 축만 X로 바꿔 왼쪽으로 민다 */
+  #game.sliding #curCard { transform:translateY(-100%); opacity:0; }
+  #game.sliding #nextCard { transform:translateY(-100%); }
+  .card.enter { transform:translateY(100%); opacity:0; }
+  /* 밀어낸 카드를 제자리로 되돌리는 한 프레임 동안 역방향 애니메이션을 감춘다 */
+  #game.notrans .card { transition:none; }
   .wm { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
         font-size:min(46vw,240px); line-height:1; opacity:.13; filter:grayscale(.2);
         pointer-events:none; user-select:none; }
@@ -143,6 +151,8 @@
   @media (min-width:760px) {
     main { flex-direction:row; }
     .card + .card { border-top:none; border-left:1px solid var(--line); }
+    #game.sliding #curCard, #game.sliding #nextCard { transform:translateX(-100%); }
+    .card.enter { transform:translateX(100%); }
     .wm { font-size:min(22vw,260px); }
     .period { font-size:24px; }
     #result, #select { max-width:620px; margin:0 auto; width:100%; }
@@ -468,6 +478,7 @@ function start() {
   paintCard("cur", first);
   paintValue($("curValue"), first.return);
   deal();
+  setEnabled(true);
 }
 
 function deal() {
@@ -478,8 +489,9 @@ function deal() {
   $("nextValue").textContent = "?";
   $("nextValue").className = "value";
   $("mark").textContent = "";
-  setEnabled(true);
 }
+
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
 
 function setEnabled(on) { $("btnUp").disabled = !on; $("btnDown").disabled = !on; }
 
@@ -493,14 +505,38 @@ function answer(higher) {
     if (!correct) return setTimeout(end, 900);
     state.streak++;
     $("streak").textContent = state.streak;
-    setTimeout(() => {
-      state.current = state.next;
-      paintCard("cur", state.current);
-      paintValue($("curValue"), state.current.return);
-      if (state.used.size >= cards.length) return end();
-      deal();
-    }, 600);
+    setTimeout(slide, 600);
   }, 600);
+}
+
+/* 다음 카드를 기준 카드 자리로 옮기는 전환.
+   sliding으로 두 장을 함께 밀어낸 뒤, transition을 한 프레임 끈 상태에서
+   위치를 되돌리며 카드를 갈아끼우고, 새로 뽑은 카드는 반대편에서 들여보낸다.
+   버튼은 들어오는 애니메이션까지 끝난 뒤에 열어 이동 중 클릭을 막는다 */
+function slide() {
+  const g = $("game"), next = $("nextCard");
+  const swap = () => {
+    state.current = state.next;
+    paintCard("cur", state.current);
+    paintValue($("curValue"), state.current.return);
+    if (state.used.size >= cards.length) { end(); return false; }
+    deal();
+    return true;
+  };
+  if (REDUCED.matches) return void (swap() && setEnabled(true));
+
+  g.classList.add("sliding");
+  setTimeout(() => {
+    g.classList.add("notrans");
+    g.classList.remove("sliding");
+    const more = swap();
+    if (more) next.classList.add("enter");
+    void g.offsetWidth;                      // 위 변경들을 한 프레임으로 묶는다
+    g.classList.remove("notrans");
+    if (!more) return;
+    next.classList.remove("enter");
+    setTimeout(() => setEnabled(true), 450);
+  }, 450);
 }
 
 async function end() {
